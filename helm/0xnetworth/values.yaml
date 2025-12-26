@@ -1,6 +1,9 @@
 # Default values for 0xnetworth
 # This is a YAML-formatted file.
 
+# Override the full name to use "networth" instead of "0xnetworth"
+fullnameOverride: "networth"
+
 # Image pull secrets for private container registries
 # Create a secret with: kubectl create secret docker-registry ghcr-secret \
 #   --docker-server=ghcr.io \
