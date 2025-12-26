@@ -229,8 +229,10 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 	// Generate JWT token for this request
 	jwtToken, err := c.generateJWT(method, path)
 	if err != nil {
+		log.Printf("Failed to generate JWT: %v", err)
 		return nil, fmt.Errorf("failed to generate JWT: %w", err)
 	}
+	log.Printf("Generated JWT for [%s %s], token length: %d", method, path, len(jwtToken))
 
 	// Set headers
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
@@ -249,6 +251,8 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 		// Create a new reader for the body since we consumed it
 		resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		log.Printf("Coinbase API error [%s %s]: %d - %s", method, path, resp.StatusCode, string(bodyBytes))
+		log.Printf("Request URL: %s", url)
+		log.Printf("API Key Name: %s", c.apiKeyName)
 	}
 
 	return resp, nil
