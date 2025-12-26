@@ -459,9 +459,12 @@ func (c *Client) SyncAccount(accountID string) error {
 // SyncAll syncs all accounts and investments from Coinbase
 // Handles cases where account access is restricted (e.g., Portfolio primary view access only)
 func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
+	log.Printf("SyncAll: Starting sync with API key: %s", c.apiKeyName)
+	
 	// Try to get accounts, but don't fail if we get 403 (forbidden)
 	// This handles cases where the API key only has "Portfolio primary view access"
 	accounts := make([]*models.Account, 0)
+	log.Printf("SyncAll: Attempting to fetch accounts...")
 	accountsResp, err := c.GetAccounts()
 	if err != nil {
 		// Check if it's a 403/forbidden error
@@ -474,11 +477,13 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 		}
 	} else {
 		accounts = accountsResp
+		log.Printf("SyncAll: Successfully fetched %d accounts", len(accounts))
 	}
 
 	// Get investments from all portfolios
 	// This should work with "Portfolio primary view access"
 	investments := make([]*models.Investment, 0)
+	log.Printf("SyncAll: Attempting to fetch portfolios...")
 	portfolios, err := c.GetPortfolios()
 	if err != nil {
 		// If we can't get portfolios either, return what we have
