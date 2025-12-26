@@ -5,12 +5,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -43,15 +45,36 @@ type Client struct {
 
 // NewClient creates a new Coinbase API client
 // apiKeyName: The API Key Name (ID) from Coinbase Advanced Trade API
-// privateKeyPEM: The Private Key in PEM format from Coinbase Advanced Trade API
-func NewClient(apiKeyName, privateKeyPEM string) (*Client, error) {
-	// Parse the PEM-encoded private key
-	block, _ := pem.Decode([]byte(privateKeyPEM))
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
+// privateKeyData: The Private Key - can be in PEM format or base64-encoded DER (as provided in JSON file)
+func NewClient(apiKeyName, privateKeyData string) (*Client, error) {
+	var keyBytes []byte
+	var err error
+	
+	// Coinbase provides the private key in two possible formats:
+	// 1. PEM format: "-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----\n"
+	// 2. Base64-encoded DER (from JSON file): just the base64 string without PEM headers
+	
+	// First, try to decode as PEM format
+	block, _ := pem.Decode([]byte(privateKeyData))
+	if block != nil {
+		// Successfully decoded PEM block - use the DER bytes directly
+		keyBytes = block.Bytes
+	} else {
+		// Not in PEM format, assume it's base64-encoded DER (from JSON file)
+		// Remove any whitespace/newlines that might be present
+		cleanedKey := strings.TrimSpace(privateKeyData)
+		cleanedKey = strings.ReplaceAll(cleanedKey, "\n", "")
+		cleanedKey = strings.ReplaceAll(cleanedKey, " ", "")
+		
+		// Decode base64 to get DER bytes
+		keyBytes, err = base64.StdEncoding.DecodeString(cleanedKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode private key from base64: %w", err)
+		}
 	}
 
-	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	// Parse the DER bytes as an EC private key
+	privateKey, err := x509.ParseECPrivateKey(keyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
 	}
