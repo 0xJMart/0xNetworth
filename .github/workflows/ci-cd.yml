@@ -1,0 +1,202 @@
+name: CI/CD - Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/0xnetworth
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      is_release: ${{ steps.version.outputs.is_release }}
+      git_sha: ${{ steps.version.outputs.git_sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version script exists
+        run: |
+          if [ ! -f scripts/version.sh ]; then
+            echo "Error: scripts/version.sh not found" >&2
+            exit 1
+          fi
+
+      - name: Extract version
+        id: version
+        run: |
+          chmod +x scripts/version.sh
+          source scripts/version.sh
+
+  build-images:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine tags
+        id: tags
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          IS_RELEASE="${{ needs.version.outputs.is_release }}"
+          # Convert repository owner to lowercase for Docker compatibility
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/0xnetworth/${{ matrix.component }}"
+          
+          TAGS="${IMAGE}:${VERSION}"
+          if [ "$IS_RELEASE" = "true" ]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          else
+            TAGS="${TAGS},${IMAGE}:main"
+          fi
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: Verify Dockerfile exists
+        run: |
+          if [ ! -f ${{ matrix.component }}/Dockerfile ]; then
+            echo "Error: Dockerfile not found in ${{ matrix.component }}/" >&2
+            exit 1
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.component }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.version.outputs.git_sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
+
+  package-helm:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract chart name and update Chart.yaml
+        id: chart
+        run: |
+          CHART_DIR="helm/0xnetworth"
+          if [ ! -f "$CHART_DIR/Chart.yaml" ]; then
+            echo "Error: Chart.yaml not found in $CHART_DIR/" >&2
+            exit 1
+          fi
+          
+          # Extract chart name from Chart.yaml
+          CHART_NAME=$(grep '^name:' "$CHART_DIR/Chart.yaml" | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
+          if [ -z "$CHART_NAME" ]; then
+            echo "Error: Could not extract chart name from Chart.yaml" >&2
+            exit 1
+          fi
+          
+          # Update version and appVersion with validation
+          VERSION="${{ needs.version.outputs.version }}"
+          APP_VERSION="${{ needs.version.outputs.app_version }}"
+          
+          # Validate versions are not empty
+          if [ -z "$VERSION" ] || [ -z "$APP_VERSION" ]; then
+            echo "Error: Version or appVersion is empty" >&2
+            exit 1
+          fi
+          
+          # Update Chart.yaml
+          sed -i "s/^version:.*/version: $VERSION/" "$CHART_DIR/Chart.yaml"
+          sed -i "s/^appVersion:.*/appVersion: \"$APP_VERSION\"/" "$CHART_DIR/Chart.yaml"
+          
+          # Verify the update worked
+          if ! grep -q "^version: $VERSION" "$CHART_DIR/Chart.yaml"; then
+            echo "Error: Failed to update version in Chart.yaml" >&2
+            exit 1
+          fi
+          if ! grep -q "^appVersion: \"$APP_VERSION\"" "$CHART_DIR/Chart.yaml"; then
+            echo "Error: Failed to update appVersion in Chart.yaml" >&2
+            exit 1
+          fi
+          
+          echo "chart_name=$CHART_NAME" >> $GITHUB_OUTPUT
+          echo "Chart name: $CHART_NAME"
+          echo "Updated version to: $VERSION"
+          echo "Updated appVersion to: $APP_VERSION"
+
+      - name: Package Helm chart
+        run: |
+          helm package helm/0xnetworth --destination /tmp/chart
+          CHART_COUNT=$(ls -1 /tmp/chart/*.tgz 2>/dev/null | wc -l)
+          if [ "$CHART_COUNT" -eq 0 ]; then
+            echo "Error: Helm package failed - no .tgz file created" >&2
+            exit 1
+          fi
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          CHART_FILE=$(ls /tmp/chart/*.tgz)
+          if [ -z "$CHART_FILE" ] || [ ! -f "$CHART_FILE" ]; then
+            echo "Error: Chart file not found" >&2
+            exit 1
+          fi
+          # Convert repository owner to lowercase for OCI registry compatibility
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push "$CHART_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/0xnetworth
+
+      - name: Output chart location
+        run: |
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "Helm chart published to: oci://${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/0xnetworth/${{ steps.chart.outputs.chart_name }}:${{ needs.version.outputs.version }}"
+

@@ -37,10 +37,10 @@ A comprehensive investment tracking dashboard that aggregates data from Coinbase
 - Investment performance charts
 - Platform-specific summaries
 
-### Phase 5: Deployment (Planned)
+### Phase 5: Deployment ✅ **Completed**
 - Helm chart for Kubernetes
 - CI/CD pipeline
-- Homelab integration via Flux CD
+- Homelab integration via Flux CD (Planned)
 
 ### Future Enhancements
 - Agentic workflow for market analysis
@@ -131,7 +131,76 @@ Coinbase integration uses the Coinbase Advanced Trade API. The integration is fu
 
 ## Deployment
 
-The project includes a Helm chart for Kubernetes deployment and a CI/CD pipeline that publishes Docker images and Helm charts to GitHub Container Registry (GHCR).
+The project includes a Helm chart for Kubernetes deployment and a CI/CD pipeline that automatically builds and publishes Docker images and Helm charts to GitHub Container Registry (GHCR).
+
+### CI/CD Pipeline
+
+The CI/CD pipeline (`.github/workflows/ci-cd.yml`) runs on:
+- Push to `main` branch (development builds)
+- Git tags matching `v*` pattern (release builds)
+- Manual trigger via `workflow_dispatch`
+
+### Versioning Strategy
+
+All builds use semantic versioning (semver):
+
+- **Release builds** (git tags like `v1.0.0`):
+  - Images tagged: `1.0.0`, `latest`
+  - Helm chart version: `1.0.0`
+  - Chart appVersion: `1.0.0`
+
+- **Development builds** (push to main):
+  - Images tagged: `0.0.0-<short-commit>`, `main`
+  - Helm chart version: `0.0.0-<short-commit>` (pre-release semver format)
+  - Chart appVersion: `0.0.0-<short-commit>`
+
+### Published Artifacts
+
+**Docker Images** (published to GHCR):
+- `ghcr.io/0xjmart/0xnetworth/backend:<version>`
+- `ghcr.io/0xjmart/0xnetworth/frontend:<version>`
+
+**Helm Chart** (published as OCI artifact):
+- `oci://ghcr.io/0xjmart/0xnetworth/0xnetworth:<version>`
+
+### Using Published Images
+
+Pull and use the published Docker images:
+
+```bash
+# Pull a specific version
+docker pull ghcr.io/0xjmart/0xnetworth/backend:1.0.0
+docker pull ghcr.io/0xjmart/0xnetworth/frontend:1.0.0
+
+# Or use latest
+docker pull ghcr.io/0xjmart/0xnetworth/backend:latest
+```
+
+### Using Published Helm Chart
+
+Install the Helm chart from the OCI registry:
+
+```bash
+# Add the OCI registry (if needed)
+helm registry login ghcr.io
+
+# Install from OCI registry
+helm install 0xnetworth oci://ghcr.io/0xjmart/0xnetworth/0xnetworth --version 1.0.0
+
+# Or install latest
+helm install 0xnetworth oci://ghcr.io/0xjmart/0xnetworth/0xnetworth
+```
+
+### Triggering Builds
+
+**Automatic builds:**
+- Push to `main` branch triggers a development build
+- Create and push a git tag (e.g., `v1.0.0`) to trigger a release build
+
+**Manual builds:**
+- Go to Actions tab in GitHub
+- Select "CI/CD - Build and Publish" workflow
+- Click "Run workflow"
 
 ### Using Published Helm Chart
 
