@@ -17,7 +17,8 @@ imagePullSecrets: []
 backend:
   image:
     repository: ghcr.io/0xjmart/0xnetworth/backend
-    tag: "latest"
+    # tag defaults to Chart.AppVersion if not specified (leave empty or omit)
+    tag: ""
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:
@@ -53,7 +54,8 @@ backend:
 frontend:
   image:
     repository: ghcr.io/0xjmart/0xnetworth/frontend
-    tag: "latest"
+    # tag defaults to Chart.AppVersion if not specified
+    tag: ""
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:

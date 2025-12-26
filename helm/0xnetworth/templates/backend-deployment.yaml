@@ -25,7 +25,7 @@ spec:
         - name: backend
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
-          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.backend.image.repository }}:{{ if .Values.backend.image.tag }}{{ .Values.backend.image.tag }}{{ else }}{{ .Chart.AppVersion }}{{ end }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           ports:
             - name: http
