@@ -1,0 +1,111 @@
+# Default values for 0xnetworth
+# This is a YAML-formatted file.
+
+# Image pull secrets for private container registries
+# Create a secret with: kubectl create secret docker-registry ghcr-secret \
+#   --docker-server=ghcr.io \
+#   --docker-username=<GITHUB_USERNAME> \
+#   --docker-password=<GITHUB_TOKEN> \
+#   --namespace=0xnetworth
+imagePullSecrets: []
+# - name: ghcr-secret
+
+# Backend configuration
+backend:
+  image:
+    repository: ghcr.io/0xjmart/0xnetworth/backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  env: []
+  # Example:
+  # - name: PORT
+  #   value: "8080"
+
+# Frontend configuration
+frontend:
+  image:
+    repository: ghcr.io/0xjmart/0xnetworth/frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - NET_RAW
+        - SYS_ADMIN
+    seccompProfile:
+      type: RuntimeDefault
+  env: []
+  # Example:
+  # - name: VITE_API_URL
+  #   value: "/api"
+
+# Secret configuration for API keys
+# These should be created separately using kubectl or Sealed Secrets
+# The secret should contain:
+#   COINBASE_API_KEY: <your-api-key>
+#   COINBASE_API_SECRET: <your-api-secret>
+secret:
+  create: false
+  name: "0xnetworth-secrets"
+  # Secret will be mounted as environment variables in backend deployment
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: "traefik"
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: 0xnetworth.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: 0xnetworth-tls
+  #    hosts:
+  #      - 0xnetworth.local
+
+# Namespace
+namespace:
+  create: true
+  name: "0xnetworth"
+
