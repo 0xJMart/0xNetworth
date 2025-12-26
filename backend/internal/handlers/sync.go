@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"0xnetworth/backend/internal/integrations/coinbase"
@@ -39,6 +40,17 @@ func (h *SyncHandler) SyncAll(c *gin.Context) {
 	accounts, investments, err := h.coinbaseClient.SyncAll()
 	if err != nil {
 		log.Printf("Error syncing from Coinbase: %v", err)
+		// Check if it's a 403 error from Coinbase API
+		// Note: We need to check the error type - APIError is in the coinbase package
+		// Since we can't import it directly, we'll check the error message
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "403") || strings.Contains(errMsg, "forbidden") {
+			log.Printf("Coinbase API returned 403 Forbidden: %s", errMsg)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Coinbase API access forbidden: " + errMsg,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to sync from Coinbase: " + err.Error(),
 		})
@@ -90,6 +102,15 @@ func (h *SyncHandler) SyncPlatform(c *gin.Context) {
 	accounts, investments, err := h.coinbaseClient.SyncAll()
 	if err != nil {
 		log.Printf("Error syncing from Coinbase: %v", err)
+		// Check if it's a 403 error from Coinbase API
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "403") || strings.Contains(errMsg, "forbidden") {
+			log.Printf("Coinbase API returned 403 Forbidden: %s", errMsg)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Coinbase API access forbidden: " + errMsg,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to sync from Coinbase: " + err.Error(),
 		})

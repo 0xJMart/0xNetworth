@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -241,6 +242,15 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 
+	// Log non-2xx responses for debugging
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		// Create a new reader for the body since we consumed it
+		resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		log.Printf("Coinbase API error [%s %s]: %d - %s", method, path, resp.StatusCode, string(bodyBytes))
+	}
+
 	return resp, nil
 }
 
@@ -457,10 +467,10 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 		// Check if it's a 403/forbidden error
 		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == http.StatusForbidden {
 			// This is expected for "Portfolio primary view access" - continue with portfolios
-			fmt.Printf("Info: Account access forbidden (expected with Portfolio primary view access), continuing with portfolios\n")
+			log.Printf("Info: Account access forbidden (expected with Portfolio primary view access), continuing with portfolios. Error: %s", apiErr.Message)
 		} else {
 			// For other errors, log but continue
-			fmt.Printf("Warning: Failed to get accounts (may be expected with limited permissions): %v\n", err)
+			log.Printf("Warning: Failed to get accounts (may be expected with limited permissions): %v", err)
 		}
 	} else {
 		accounts = accountsResp
@@ -472,18 +482,31 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 	portfolios, err := c.GetPortfolios()
 	if err != nil {
 		// If we can't get portfolios either, return what we have
+		if apiErr, ok := err.(*APIError); ok {
+			log.Printf("Error: Failed to get portfolios: %d - %s", apiErr.StatusCode, apiErr.Message)
+		} else {
+			log.Printf("Error: Failed to get portfolios: %v", err)
+		}
 		return accounts, investments, fmt.Errorf("failed to get portfolios: %w", err)
 	}
+
+	log.Printf("Info: Found %d portfolios", len(portfolios))
 
 	for _, portfolio := range portfolios {
 		portfolioInvestments, err := c.GetInvestments(portfolio.UUID)
 		if err == nil {
 			investments = append(investments, portfolioInvestments...)
+			log.Printf("Info: Got %d investments from portfolio %s", len(portfolioInvestments), portfolio.UUID)
 		} else {
 			// Log but continue with other portfolios
-			fmt.Printf("Warning: Failed to get investments for portfolio %s: %v\n", portfolio.UUID, err)
+			if apiErr, ok := err.(*APIError); ok {
+				log.Printf("Warning: Failed to get investments for portfolio %s: %d - %s", portfolio.UUID, apiErr.StatusCode, apiErr.Message)
+			} else {
+				log.Printf("Warning: Failed to get investments for portfolio %s: %v", portfolio.UUID, err)
+			}
 		}
 	}
 
+	log.Printf("Info: SyncAll completed - %d accounts, %d investments", len(accounts), len(investments))
 	return accounts, investments, nil
 }
