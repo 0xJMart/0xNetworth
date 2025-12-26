@@ -14,8 +14,7 @@ backend/
 │   ├── handlers/        # HTTP request handlers
 │   ├── store/          # In-memory data store
 │   └── integrations/   # External API clients
-│       ├── coinbase/   # Coinbase API client (Phase 4)
-│       └── plaid/      # Plaid API client for M1 Finance (Phase 5)
+│       └── coinbase/   # Coinbase API client (Phase 4)
 └── go.mod
 ```
 
@@ -50,10 +49,6 @@ PORT=8080
 COINBASE_API_KEY=your_api_key
 COINBASE_API_SECRET=your_api_secret
 
-# Plaid API (Phase 5)
-PLAID_CLIENT_ID=your_client_id
-PLAID_SECRET=your_secret
-PLAID_ENVIRONMENT=sandbox
 ```
 
 ## API Endpoints
@@ -63,7 +58,7 @@ PLAID_ENVIRONMENT=sandbox
 
 ### Accounts
 - `GET /api/accounts` - Get all accounts
-- `GET /api/accounts/platform/:platform` - Get accounts by platform (coinbase, m1_finance)
+- `GET /api/accounts/platform/:platform` - Get accounts by platform (coinbase)
 - `GET /api/accounts/:id` - Get account by ID
 
 ### Investments
@@ -83,5 +78,4 @@ PLAID_ENVIRONMENT=sandbox
 
 - ✅ Phase 2: Backend foundation complete
 - ⏳ Phase 4: Coinbase integration (placeholder ready)
-- ⏳ Phase 5: Plaid/M1 Finance integration (placeholder ready)
 

@@ -4,8 +4,7 @@ package models
 type Platform string
 
 const (
-	PlatformCoinbase  Platform = "coinbase"
-	PlatformM1Finance Platform = "m1_finance"
+	PlatformCoinbase Platform = "coinbase"
 )
 
 // Account represents an investment account

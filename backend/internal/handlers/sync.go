@@ -14,7 +14,6 @@ type SyncHandler struct {
 	store *store.Store
 	// Integration clients will be added in later phases
 	// coinbaseClient *coinbase.Client
-	// plaidClient    *plaid.Client
 }
 
 // NewSyncHandler creates a new sync handler
@@ -26,7 +25,7 @@ func NewSyncHandler(store *store.Store) *SyncHandler {
 
 // SyncAll triggers synchronization from all platforms
 func (h *SyncHandler) SyncAll(c *gin.Context) {
-	// TODO: Implement actual sync logic in Phase 4 (Coinbase) and Phase 5 (Plaid)
+	// TODO: Implement actual sync logic in Phase 4 (Coinbase)
 	// For now, just recalculate net worth and return success
 
 	h.store.RecalculateNetWorth()

@@ -35,9 +35,9 @@ func (h *AccountsHandler) GetAccountsByPlatform(c *gin.Context) {
 	platform := models.Platform(platformStr)
 
 	// Validate platform
-	if platform != models.PlatformCoinbase && platform != models.PlatformM1Finance {
+	if platform != models.PlatformCoinbase {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid platform. Must be 'coinbase' or 'm1_finance'",
+			"error": "invalid platform. Must be 'coinbase'",
 		})
 		return
 	}

@@ -104,7 +104,7 @@ Button to trigger data synchronization from external APIs.
 ## Features
 
 - Real-time net worth calculation
-- Platform filtering (Coinbase, M1 Finance)
+- Platform filtering (Coinbase)
 - Investment distribution visualization
 - Account management display
 - Manual sync functionality
@@ -122,5 +122,4 @@ Button to trigger data synchronization from external APIs.
 
 - ✅ Phase 3: Frontend foundation complete
 - ⏳ Phase 4: Coinbase integration (backend ready)
-- ⏳ Phase 5: Plaid/M1 Finance integration (backend ready)
 

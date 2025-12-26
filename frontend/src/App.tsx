@@ -66,13 +66,7 @@ function App() {
     coinbaseAccounts.reduce((sum, acc) => sum + acc.balance, 0) +
     coinbaseInvestments.reduce((sum, inv) => sum + inv.value, 0);
 
-  const m1Accounts = accounts.filter((acc) => acc.platform === 'm1_finance');
-  const m1Investments = investments.filter((inv) => inv.platform === 'm1_finance');
-  const m1Value =
-    m1Accounts.reduce((sum, acc) => sum + acc.balance, 0) +
-    m1Investments.reduce((sum, inv) => sum + inv.value, 0);
-
-  const platforms: Platform[] = ['coinbase', 'm1_finance'];
+  const platforms: Platform[] = ['coinbase'];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -135,7 +129,7 @@ function App() {
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                   >
-                    {platform === 'coinbase' ? 'Coinbase' : 'M1 Finance'}
+                    Coinbase
                   </button>
                 ))}
               </div>
@@ -148,20 +142,13 @@ function App() {
               </div>
             )}
 
-            {/* Platform Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Platform Card */}
+            <div className="mb-6">
               <PlatformCard
                 platform="coinbase"
                 accounts={coinbaseAccounts}
                 investments={coinbaseInvestments}
                 totalValue={coinbaseValue}
-                currency={networth?.currency || 'USD'}
-              />
-              <PlatformCard
-                platform="m1_finance"
-                accounts={m1Accounts}
-                investments={m1Investments}
-                totalValue={m1Value}
                 currency={networth?.currency || 'USD'}
               />
             </div>

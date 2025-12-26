@@ -28,8 +28,6 @@ export default function PlatformCard({
     switch (platform) {
       case 'coinbase':
         return 'Coinbase';
-      case 'm1_finance':
-        return 'M1 Finance';
       default:
         return platform;
     }
@@ -39,8 +37,6 @@ export default function PlatformCard({
     switch (platform) {
       case 'coinbase':
         return 'border-blue-500 bg-blue-50';
-      case 'm1_finance':
-        return 'border-green-500 bg-green-50';
       default:
         return 'border-gray-500 bg-gray-50';
     }

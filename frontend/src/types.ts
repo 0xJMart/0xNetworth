@@ -1,4 +1,4 @@
-export type Platform = 'coinbase' | 'm1_finance';
+export type Platform = 'coinbase';
 
 export interface Account {
   id: string;

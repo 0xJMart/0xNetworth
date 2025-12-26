@@ -1,11 +1,11 @@
 # 0xNetworth - Investment Tracking Dashboard
 
-A comprehensive investment tracking dashboard that aggregates data from multiple investment platforms (Coinbase, M1 Finance) to provide a unified view of net worth and investment performance.
+A comprehensive investment tracking dashboard that aggregates data from Coinbase to provide a unified view of net worth and investment performance.
 
 ## Architecture
 
 - **React Frontend** - Modern dashboard displaying investment data, charts, and net worth calculations
-- **Go Backend API** - Aggregates data from Coinbase API and Plaid (for M1 Finance) and serves to frontend
+- **Go Backend API** - Aggregates data from Coinbase API and serves to frontend
 - **Kubernetes Deployment** - Helm chart for easy deployment in homelab cluster
 
 ## Project Structure
@@ -31,10 +31,6 @@ A comprehensive investment tracking dashboard that aggregates data from multiple
 - Account balance tracking
 - Portfolio data visualization
 
-### Phase 3: M1 Finance Integration (Planned)
-- Plaid API integration for M1 Finance
-- Investment holdings tracking
-- Account aggregation
 
 ### Phase 4: Dashboard & Visualization (Planned)
 - Net worth calculation and display
@@ -109,12 +105,6 @@ Coinbase integration uses the Coinbase Advanced Trade API or Coinbase Pro API. Y
 1. Create an API key in your Coinbase account
 2. Set environment variables: `COINBASE_API_KEY` and `COINBASE_API_SECRET`
 
-### M1 Finance (via Plaid)
-
-M1 Finance integration uses Plaid API since M1 Finance doesn't provide a public API. You'll need to:
-1. Sign up for a Plaid account
-2. Create a Plaid application
-3. Set environment variables: `PLAID_CLIENT_ID`, `PLAID_SECRET`, and `PLAID_ENVIRONMENT`
 
 ## Deployment
 
