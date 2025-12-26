@@ -20,17 +20,22 @@ const (
 )
 
 // Client handles Coinbase API interactions
+// Coinbase Advanced Trade API uses:
+// - apiKeyName: The API Key Name (ID) you created in Coinbase
+// - privateKey: The Private Key associated with that API key
 type Client struct {
-	apiKey    string
-	apiSecret string
+	apiKeyName string // API Key Name/ID from Coinbase
+	privateKey string // Private Key from Coinbase
 	httpClient *http.Client
 }
 
 // NewClient creates a new Coinbase API client
-func NewClient(apiKey, apiSecret string) *Client {
+// apiKeyName: The API Key Name (ID) from Coinbase Advanced Trade API
+// privateKey: The Private Key from Coinbase Advanced Trade API
+func NewClient(apiKeyName, privateKey string) *Client {
 	return &Client{
-		apiKey:     apiKey,
-		apiSecret:  apiSecret,
+		apiKeyName: apiKeyName,
+		privateKey: privateKey,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -106,7 +111,7 @@ type coinbasePortfolioHoldingsResponse struct {
 // createSignature creates HMAC signature for Coinbase API authentication
 func (c *Client) createSignature(timestamp, method, path, body string) string {
 	message := timestamp + method + path + body
-	mac := hmac.New(sha256.New, []byte(c.apiSecret))
+	mac := hmac.New(sha256.New, []byte(c.privateKey))
 	mac.Write([]byte(message))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
@@ -134,7 +139,7 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	signature := c.createSignature(timestamp, method, path, string(bodyBytes))
 
-	req.Header.Set("CB-ACCESS-KEY", c.apiKey)
+	req.Header.Set("CB-ACCESS-KEY", c.apiKeyName)
 	req.Header.Set("CB-ACCESS-SIGN", signature)
 	req.Header.Set("CB-ACCESS-TIMESTAMP", timestamp)
 	req.Header.Set("Content-Type", "application/json")

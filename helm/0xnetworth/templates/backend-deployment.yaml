@@ -35,16 +35,16 @@ spec:
             - name: PORT
               value: "8080"
             {{- if .Values.secret.create }}
-            - name: COINBASE_API_KEY
+            - name: COINBASE_API_KEY_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
-                  key: COINBASE_API_KEY
-            - name: COINBASE_API_SECRET
+                  key: COINBASE_API_KEY_NAME
+            - name: COINBASE_API_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
-                  key: COINBASE_API_SECRET
+                  key: COINBASE_API_PRIVATE_KEY
             {{- end }}
             {{- with .Values.backend.env }}
             {{- toYaml . | nindent 12 }}

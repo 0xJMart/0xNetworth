@@ -111,14 +111,16 @@ Coinbase integration uses the Coinbase Advanced Trade API. The integration is fu
 
 2. Set environment variables:
    ```bash
-   export COINBASE_API_KEY=your_api_key_here
-   export COINBASE_API_SECRET=your_api_secret_here
+   export COINBASE_API_KEY_NAME=your_api_key_name
+   export COINBASE_API_PRIVATE_KEY=your_private_key
    ```
+   
+   **Note:** Coinbase Advanced Trade API uses an API Key Name (ID) and a Private Key. You can also use the legacy variable names `COINBASE_API_KEY` and `COINBASE_API_SECRET` for backward compatibility.
 
 3. Or create a `.env` file in the backend directory:
    ```
-   COINBASE_API_KEY=your_api_key_here
-   COINBASE_API_SECRET=your_api_secret_here
+   COINBASE_API_KEY_NAME=your_api_key_name
+   COINBASE_API_PRIVATE_KEY=your_private_key
    ```
 
 **Features:**

@@ -17,11 +17,19 @@ func main() {
 	store := store.NewStore()
 
 	// Initialize Coinbase client if API keys are provided
+	// Coinbase Advanced Trade API uses API Key Name (ID) and Private Key
 	var coinbaseClient *coinbase.Client
-	coinbaseAPIKey := os.Getenv("COINBASE_API_KEY")
-	coinbaseAPISecret := os.Getenv("COINBASE_API_SECRET")
-	if coinbaseAPIKey != "" && coinbaseAPISecret != "" {
-		coinbaseClient = coinbase.NewClient(coinbaseAPIKey, coinbaseAPISecret)
+	coinbaseAPIKeyName := os.Getenv("COINBASE_API_KEY_NAME")
+	coinbaseAPIPrivateKey := os.Getenv("COINBASE_API_PRIVATE_KEY")
+	// Support legacy environment variable names for backward compatibility
+	if coinbaseAPIKeyName == "" {
+		coinbaseAPIKeyName = os.Getenv("COINBASE_API_KEY")
+	}
+	if coinbaseAPIPrivateKey == "" {
+		coinbaseAPIPrivateKey = os.Getenv("COINBASE_API_SECRET")
+	}
+	if coinbaseAPIKeyName != "" && coinbaseAPIPrivateKey != "" {
+		coinbaseClient = coinbase.NewClient(coinbaseAPIKeyName, coinbaseAPIPrivateKey)
 		log.Println("Coinbase client initialized")
 	} else {
 		log.Println("Warning: Coinbase API keys not configured. Sync functionality will be limited.")
