@@ -74,9 +74,23 @@ func NewClient(apiKeyName, privateKeyData string) (*Client, error) {
 	}
 
 	// Parse the DER bytes as an EC private key
-	privateKey, err := x509.ParseECPrivateKey(keyBytes)
+	// Try SEC1 format first (EC private key), then PKCS8 if that fails
+	var privateKey *ecdsa.PrivateKey
+	ecKey, err := x509.ParseECPrivateKey(keyBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
+		// If SEC1 format fails, try PKCS8 format (used in some Coinbase API key formats)
+		pkcs8Key, pkcs8Err := x509.ParsePKCS8PrivateKey(keyBytes)
+		if pkcs8Err != nil {
+			return nil, fmt.Errorf("failed to parse private key (tried both SEC1 and PKCS8): SEC1 error: %w, PKCS8 error: %v", err, pkcs8Err)
+		}
+		// Convert PKCS8 to ECDSA
+		var ok bool
+		privateKey, ok = pkcs8Key.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not an ECDSA key")
+		}
+	} else {
+		privateKey = ecKey
 	}
 
 	return &Client{
