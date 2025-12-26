@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
+	"0xnetworth/backend/internal/integrations/coinbase"
+	"0xnetworth/backend/internal/models"
 	"0xnetworth/backend/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -11,42 +14,108 @@ import (
 
 // SyncHandler handles data synchronization requests
 type SyncHandler struct {
-	store *store.Store
-	// Integration clients will be added in later phases
-	// coinbaseClient *coinbase.Client
+	store         *store.Store
+	coinbaseClient *coinbase.Client
 }
 
 // NewSyncHandler creates a new sync handler
-func NewSyncHandler(store *store.Store) *SyncHandler {
+func NewSyncHandler(store *store.Store, coinbaseClient *coinbase.Client) *SyncHandler {
 	return &SyncHandler{
-		store: store,
+		store:          store,
+		coinbaseClient: coinbaseClient,
 	}
 }
 
 // SyncAll triggers synchronization from all platforms
 func (h *SyncHandler) SyncAll(c *gin.Context) {
-	// TODO: Implement actual sync logic in Phase 4 (Coinbase)
-	// For now, just recalculate net worth and return success
+	if h.coinbaseClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Coinbase client not configured",
+		})
+		return
+	}
 
+	// Sync from Coinbase
+	accounts, investments, err := h.coinbaseClient.SyncAll()
+	if err != nil {
+		log.Printf("Error syncing from Coinbase: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to sync from Coinbase: " + err.Error(),
+		})
+		return
+	}
+
+	// Store accounts
+	for _, account := range accounts {
+		h.store.CreateOrUpdateAccount(account)
+	}
+
+	// Store investments
+	for _, investment := range investments {
+		h.store.CreateOrUpdateInvestment(investment)
+	}
+
+	// Recalculate net worth
 	h.store.RecalculateNetWorth()
 	h.store.SetLastSyncTime(time.Now())
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "sync triggered (placeholder - integrations not yet implemented)",
+		"message":   "sync completed successfully",
 		"last_sync": h.store.GetLastSyncTime().Format(time.RFC3339),
+		"accounts_synced": len(accounts),
+		"investments_synced": len(investments),
 	})
 }
 
 // SyncPlatform triggers synchronization for a specific platform
 func (h *SyncHandler) SyncPlatform(c *gin.Context) {
-	platform := c.Param("platform")
+	platformStr := c.Param("platform")
+	platform := models.Platform(platformStr)
 
-	// TODO: Implement platform-specific sync logic
-	// For now, just return a placeholder response
+	if platform != models.PlatformCoinbase {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid platform. Only 'coinbase' is supported",
+		})
+		return
+	}
+
+	if h.coinbaseClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Coinbase client not configured",
+		})
+		return
+	}
+
+	// Sync from Coinbase
+	accounts, investments, err := h.coinbaseClient.SyncAll()
+	if err != nil {
+		log.Printf("Error syncing from Coinbase: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to sync from Coinbase: " + err.Error(),
+		})
+		return
+	}
+
+	// Store accounts
+	for _, account := range accounts {
+		h.store.CreateOrUpdateAccount(account)
+	}
+
+	// Store investments
+	for _, investment := range investments {
+		h.store.CreateOrUpdateInvestment(investment)
+	}
+
+	// Recalculate net worth
+	h.store.RecalculateNetWorth()
+	h.store.SetLastSyncTime(time.Now())
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "sync triggered for platform: " + platform + " (placeholder - integrations not yet implemented)",
-		"platform": platform,
+		"message":   "sync completed successfully for " + platformStr,
+		"platform":  platformStr,
+		"last_sync": h.store.GetLastSyncTime().Format(time.RFC3339),
+		"accounts_synced": len(accounts),
+		"investments_synced": len(investments),
 	})
 }
 

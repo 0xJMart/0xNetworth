@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"0xnetworth/backend/internal/handlers"
+	"0xnetworth/backend/internal/integrations/coinbase"
 	"0xnetworth/backend/internal/store"
 
 	"github.com/gin-contrib/cors"
@@ -15,11 +16,22 @@ func main() {
 	// Initialize store
 	store := store.NewStore()
 
+	// Initialize Coinbase client if API keys are provided
+	var coinbaseClient *coinbase.Client
+	coinbaseAPIKey := os.Getenv("COINBASE_API_KEY")
+	coinbaseAPISecret := os.Getenv("COINBASE_API_SECRET")
+	if coinbaseAPIKey != "" && coinbaseAPISecret != "" {
+		coinbaseClient = coinbase.NewClient(coinbaseAPIKey, coinbaseAPISecret)
+		log.Println("Coinbase client initialized")
+	} else {
+		log.Println("Warning: Coinbase API keys not configured. Sync functionality will be limited.")
+	}
+
 	// Initialize handlers
 	accountsHandler := handlers.NewAccountsHandler(store)
 	investmentsHandler := handlers.NewInvestmentsHandler(store)
 	networthHandler := handlers.NewNetWorthHandler(store)
-	syncHandler := handlers.NewSyncHandler(store)
+	syncHandler := handlers.NewSyncHandler(store, coinbaseClient)
 
 	// Setup router
 	router := gin.Default()

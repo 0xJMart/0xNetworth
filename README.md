@@ -101,9 +101,32 @@ The frontend will start on `http://localhost:5173` (or another port if 5173 is t
 
 ### Coinbase
 
-Coinbase integration uses the Coinbase Advanced Trade API or Coinbase Pro API. You'll need to:
-1. Create an API key in your Coinbase account
-2. Set environment variables: `COINBASE_API_KEY` and `COINBASE_API_SECRET`
+Coinbase integration uses the Coinbase Advanced Trade API. The integration is fully implemented and ready to use.
+
+**Setup:**
+1. Create an API key in your Coinbase account:
+   - Go to https://www.coinbase.com/settings/api
+   - Create a new API key with appropriate permissions (read-only recommended)
+   - Save the API key and secret (you'll only see the secret once)
+
+2. Set environment variables:
+   ```bash
+   export COINBASE_API_KEY=your_api_key_here
+   export COINBASE_API_SECRET=your_api_secret_here
+   ```
+
+3. Or create a `.env` file in the backend directory:
+   ```
+   COINBASE_API_KEY=your_api_key_here
+   COINBASE_API_SECRET=your_api_secret_here
+   ```
+
+**Features:**
+- Fetches all Coinbase accounts (trading, savings, etc.)
+- Retrieves portfolio holdings
+- Gets current cryptocurrency prices
+- Calculates investment values
+- Automatic sync via API endpoints
 
 
 ## Deployment
