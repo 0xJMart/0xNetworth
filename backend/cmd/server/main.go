@@ -29,7 +29,11 @@ func main() {
 		coinbaseAPIPrivateKey = os.Getenv("COINBASE_API_SECRET")
 	}
 	if coinbaseAPIKeyName != "" && coinbaseAPIPrivateKey != "" {
-		coinbaseClient = coinbase.NewClient(coinbaseAPIKeyName, coinbaseAPIPrivateKey)
+		var err error
+		coinbaseClient, err = coinbase.NewClient(coinbaseAPIKeyName, coinbaseAPIPrivateKey)
+		if err != nil {
+			log.Fatalf("Failed to initialize Coinbase client: %v", err)
+		}
 		log.Println("Coinbase client initialized")
 	} else {
 		log.Println("Warning: Coinbase API keys not configured. Sync functionality will be limited.")

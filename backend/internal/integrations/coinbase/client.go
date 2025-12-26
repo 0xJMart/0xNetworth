@@ -2,16 +2,18 @@ package coinbase
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"0xnetworth/backend/internal/models"
 )
 
@@ -19,25 +21,46 @@ const (
 	coinbaseAPIBaseURL = "https://api.coinbase.com/api/v3"
 )
 
+// APIError represents an error from the Coinbase API with status code
+type APIError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("coinbase API error: %d - %s", e.StatusCode, e.Message)
+}
+
 // Client handles Coinbase API interactions
 // Coinbase Advanced Trade API uses:
 // - apiKeyName: The API Key Name (ID) you created in Coinbase
-// - privateKey: The Private Key associated with that API key
+// - privateKey: The Private Key (PEM format) associated with that API key
 type Client struct {
-	apiKeyName string // API Key Name/ID from Coinbase
-	privateKey string // Private Key from Coinbase
+	apiKeyName string        // API Key Name/ID from Coinbase
+	privateKey *ecdsa.PrivateKey // Parsed ECDSA private key
 	httpClient *http.Client
 }
 
 // NewClient creates a new Coinbase API client
 // apiKeyName: The API Key Name (ID) from Coinbase Advanced Trade API
-// privateKey: The Private Key from Coinbase Advanced Trade API
-func NewClient(apiKeyName, privateKey string) *Client {
+// privateKeyPEM: The Private Key in PEM format from Coinbase Advanced Trade API
+func NewClient(apiKeyName, privateKeyPEM string) (*Client, error) {
+	// Parse the PEM-encoded private key
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
+	}
+
 	return &Client{
 		apiKeyName: apiKeyName,
 		privateKey: privateKey,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-	}
+	}, nil
 }
 
 // Coinbase API Response Types
@@ -108,15 +131,45 @@ type coinbasePortfolioHoldingsResponse struct {
 	Data []coinbasePortfolioHoldings `json:"data"`
 }
 
-// createSignature creates HMAC signature for Coinbase API authentication
-func (c *Client) createSignature(timestamp, method, path, body string) string {
-	message := timestamp + method + path + body
-	mac := hmac.New(sha256.New, []byte(c.privateKey))
-	mac.Write([]byte(message))
-	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
+// generateJWT creates a JWT token for Coinbase Advanced Trade API authentication
+// The JWT must include the request URI in the payload for REST API requests
+func (c *Client) generateJWT(method, path string) (string, error) {
+	now := time.Now()
+	
+	// Create URI claim: "{method} {host}{path}"
+	uri := fmt.Sprintf("%s api.coinbase.com%s", method, path)
+	
+	// Generate a random nonce
+	nonceBytes := make([]byte, 16)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
+	}
+	nonce := fmt.Sprintf("%x", nonceBytes)
+	
+	// Create JWT claims
+	claims := jwt.MapClaims{
+		"sub": c.apiKeyName,                    // Subject: API key ID
+		"iss": "cdp",                           // Issuer: Coinbase Developer Platform
+		"nbf": now.Unix(),                      // Not before: current time
+		"exp": now.Unix() + 120,                // Expiration: 2 minutes from now
+		"uri": uri,                             // URI claim for REST API
+	}
+	
+	// Create token with headers
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	token.Header["kid"] = c.apiKeyName
+	token.Header["nonce"] = nonce
+	
+	// Sign the token
+	tokenString, err := token.SignedString(c.privateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign JWT: %w", err)
+	}
+	
+	return tokenString, nil
 }
 
-// makeRequest makes an authenticated request to Coinbase API
+// makeRequest makes an authenticated request to Coinbase API using JWT
 func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Response, error) {
 	url := coinbaseAPIBaseURL + path
 	
@@ -135,14 +188,16 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Coinbase API authentication
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	signature := c.createSignature(timestamp, method, path, string(bodyBytes))
+	// Generate JWT token for this request
+	jwtToken, err := c.generateJWT(method, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate JWT: %w", err)
+	}
 
-	req.Header.Set("CB-ACCESS-KEY", c.apiKeyName)
-	req.Header.Set("CB-ACCESS-SIGN", signature)
-	req.Header.Set("CB-ACCESS-TIMESTAMP", timestamp)
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -162,7 +217,10 @@ func (c *Client) GetAccounts() ([]*models.Account, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("coinbase API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+		}
 	}
 
 	var apiResp coinbaseAccountsResponse
@@ -211,7 +269,10 @@ func (c *Client) GetPortfolios() ([]coinbasePortfolio, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("coinbase API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+		}
 	}
 
 	var apiResp coinbasePortfoliosResponse
@@ -237,7 +298,10 @@ func (c *Client) GetPortfolioHoldings(portfolioID string) ([]coinbasePortfolioHo
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("coinbase API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+		}
 	}
 
 	var apiResp coinbasePortfolioHoldingsResponse
@@ -263,7 +327,10 @@ func (c *Client) GetProductPrice(productID string) (float64, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("coinbase API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		return 0, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+		}
 	}
 
 	var product coinbaseProduct
@@ -343,21 +410,41 @@ func (c *Client) SyncAccount(accountID string) error {
 }
 
 // SyncAll syncs all accounts and investments from Coinbase
+// Handles cases where account access is restricted (e.g., Portfolio primary view access only)
 func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
-	accounts, err := c.GetAccounts()
+	// Try to get accounts, but don't fail if we get 403 (forbidden)
+	// This handles cases where the API key only has "Portfolio primary view access"
+	accounts := make([]*models.Account, 0)
+	accountsResp, err := c.GetAccounts()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get accounts: %w", err)
+		// Check if it's a 403/forbidden error
+		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == http.StatusForbidden {
+			// This is expected for "Portfolio primary view access" - continue with portfolios
+			fmt.Printf("Info: Account access forbidden (expected with Portfolio primary view access), continuing with portfolios\n")
+		} else {
+			// For other errors, log but continue
+			fmt.Printf("Warning: Failed to get accounts (may be expected with limited permissions): %v\n", err)
+		}
+	} else {
+		accounts = accountsResp
 	}
 
 	// Get investments from all portfolios
+	// This should work with "Portfolio primary view access"
 	investments := make([]*models.Investment, 0)
 	portfolios, err := c.GetPortfolios()
-	if err == nil {
-		for _, portfolio := range portfolios {
-			portfolioInvestments, err := c.GetInvestments(portfolio.UUID)
-			if err == nil {
-				investments = append(investments, portfolioInvestments...)
-			}
+	if err != nil {
+		// If we can't get portfolios either, return what we have
+		return accounts, investments, fmt.Errorf("failed to get portfolios: %w", err)
+	}
+
+	for _, portfolio := range portfolios {
+		portfolioInvestments, err := c.GetInvestments(portfolio.UUID)
+		if err == nil {
+			investments = append(investments, portfolioInvestments...)
+		} else {
+			// Log but continue with other portfolios
+			fmt.Printf("Warning: Failed to get investments for portfolio %s: %v\n", portfolio.UUID, err)
 		}
 	}
 
