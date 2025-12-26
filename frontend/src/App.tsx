@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react';
-import {
-  Account,
-  Investment,
-  NetWorth,
-  Platform,
-  fetchAccounts,
-  fetchInvestments,
-  fetchNetWorth,
-  fetchNetWorthBreakdown,
-} from './api';
+import { Account, Investment, NetWorth, Platform } from './types';
+import { fetchAccounts, fetchInvestments, fetchNetWorth } from './api';
 import NetWorthCard from './components/NetWorthCard';
 import AccountList from './components/AccountList';
 import InvestmentChart from './components/InvestmentChart';
