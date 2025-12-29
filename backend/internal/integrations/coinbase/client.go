@@ -180,12 +180,14 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 	}
 
 	// Generate JWT token for this request
-	jwtToken, err := c.generateJWT(method, path)
+	// JWT path must include /api/v3 to match the actual request URL
+	fullPath := "/api/v3" + path
+	jwtToken, err := c.generateJWT(method, fullPath)
 	if err != nil {
 		log.Printf("Failed to generate JWT: %v", err)
 		return nil, fmt.Errorf("failed to generate JWT: %w", err)
 	}
-	log.Printf("Generated JWT for [%s %s], token length: %d", method, path, len(jwtToken))
+	log.Printf("Generated JWT for [%s %s], token length: %d", method, fullPath, len(jwtToken))
 
 	// Set headers
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))

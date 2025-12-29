@@ -169,3 +169,4 @@ jobs:
           git commit -m "chore: update 0xnetworth chart version to ${{ steps.version.outputs.version }}"
           git push
 
+
