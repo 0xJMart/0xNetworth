@@ -145,7 +145,7 @@ function App() {
 
             {/* Investment Chart */}
             <div className="mb-6">
-              <InvestmentChart investments={filteredInvestments} />
+              <InvestmentChart investments={filteredInvestments} portfolios={filteredPortfolios} />
             </div>
 
             {/* Portfolios with Holdings */}

@@ -1,4 +1,4 @@
-import { Investment } from '../types';
+import { Investment, Portfolio } from '../types';
 import {
   PieChart,
   Pie,
@@ -10,6 +10,7 @@ import {
 
 interface InvestmentChartProps {
   investments: Investment[];
+  portfolios: Portfolio[];
 }
 
 const COLORS = [
@@ -23,7 +24,7 @@ const COLORS = [
   '#84cc16', // lime
 ];
 
-export default function InvestmentChart({ investments }: InvestmentChartProps) {
+export default function InvestmentChart({ investments, portfolios }: InvestmentChartProps) {
   if (investments.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
