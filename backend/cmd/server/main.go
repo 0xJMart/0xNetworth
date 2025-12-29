@@ -17,7 +17,10 @@ func main() {
 	store := store.NewStore()
 
 	// Initialize Coinbase client if API keys are provided
-	// Coinbase Advanced Trade API uses API Key Name (ID) and Private Key
+	// Coinbase Advanced Trade API uses CDP API Keys for authentication
+	// API Key Name can be UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+	// or full path format (organizations/{org_id}/apiKeys/{key_id})
+	// See: https://docs.cdp.coinbase.com/api-reference/v2/authentication
 	var coinbaseClient *coinbase.Client
 	coinbaseAPIKeyName := os.Getenv("COINBASE_API_KEY_NAME")
 	coinbaseAPIPrivateKey := os.Getenv("COINBASE_API_PRIVATE_KEY")

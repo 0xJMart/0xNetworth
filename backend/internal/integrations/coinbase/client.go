@@ -2,21 +2,15 @@ package coinbase
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/coinbase/cdp-sdk/go/auth"
 	"0xnetworth/backend/internal/models"
 )
 
@@ -35,69 +29,34 @@ func (e *APIError) Error() string {
 }
 
 // Client handles Coinbase API interactions
-// Coinbase Advanced Trade API uses:
-// - apiKeyName: The API Key Name (ID) you created in Coinbase
-// - privateKey: The Private Key (PEM format) associated with that API key
+// Coinbase Advanced Trade API uses CDP API Keys for authentication:
+// - apiKeyName: The CDP API Key ID (UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+//   or full path format: organizations/{org_id}/apiKeys/{key_id})
+// - apiKeySecret: The Private Key (PEM format or base64-encoded DER) associated with that API key
+// See: https://docs.cdp.coinbase.com/api-reference/v2/authentication
 type Client struct {
-	apiKeyName string        // API Key Name/ID from Coinbase
-	privateKey *ecdsa.PrivateKey // Parsed ECDSA private key
-	httpClient *http.Client
+	apiKeyName   string // CDP API Key ID (UUID or full path format)
+	apiKeySecret string // API Key Secret (PEM or base64-encoded DER format)
+	httpClient   *http.Client
 }
 
-// NewClient creates a new Coinbase API client
-// apiKeyName: The API Key Name (ID) from Coinbase Advanced Trade API
-// privateKeyData: The Private Key - can be in PEM format or base64-encoded DER (as provided in JSON file)
-func NewClient(apiKeyName, privateKeyData string) (*Client, error) {
-	var keyBytes []byte
-	var err error
-	
-	// Coinbase provides the private key in two possible formats:
-	// 1. PEM format: "-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----\n"
-	// 2. Base64-encoded DER (from JSON file): just the base64 string without PEM headers
-	
-	// First, try to decode as PEM format
-	block, _ := pem.Decode([]byte(privateKeyData))
-	if block != nil {
-		// Successfully decoded PEM block - use the DER bytes directly
-		keyBytes = block.Bytes
-	} else {
-		// Not in PEM format, assume it's base64-encoded DER (from JSON file)
-		// Remove any whitespace/newlines that might be present
-		cleanedKey := strings.TrimSpace(privateKeyData)
-		cleanedKey = strings.ReplaceAll(cleanedKey, "\n", "")
-		cleanedKey = strings.ReplaceAll(cleanedKey, " ", "")
-		
-		// Decode base64 to get DER bytes
-		keyBytes, err = base64.StdEncoding.DecodeString(cleanedKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode private key from base64: %w", err)
-		}
+// NewClient creates a new Coinbase API client using CDP API v2 authentication
+// apiKeyName: The CDP API Key ID (UUID or full path format: organizations/{org_id}/apiKeys/{key_id})
+// apiKeySecret: The Private Key - can be in PEM format or base64-encoded DER (as provided in JSON file from CDP Portal)
+// The CDP SDK handles parsing of the private key in various formats (ES256 or Ed25519)
+// See: https://docs.cdp.coinbase.com/api-reference/v2/authentication#creating-secret-api-keys
+func NewClient(apiKeyName, apiKeySecret string) (*Client, error) {
+	if apiKeyName == "" {
+		return nil, fmt.Errorf("apiKeyName cannot be empty")
 	}
-
-	// Parse the DER bytes as an EC private key
-	// Try SEC1 format first (EC private key), then PKCS8 if that fails
-	var privateKey *ecdsa.PrivateKey
-	ecKey, err := x509.ParseECPrivateKey(keyBytes)
-	if err != nil {
-		// If SEC1 format fails, try PKCS8 format (used in some Coinbase API key formats)
-		pkcs8Key, pkcs8Err := x509.ParsePKCS8PrivateKey(keyBytes)
-		if pkcs8Err != nil {
-			return nil, fmt.Errorf("failed to parse private key (tried both SEC1 and PKCS8): SEC1 error: %w, PKCS8 error: %v", err, pkcs8Err)
-		}
-		// Convert PKCS8 to ECDSA
-		var ok bool
-		privateKey, ok = pkcs8Key.(*ecdsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("private key is not an ECDSA key")
-		}
-	} else {
-		privateKey = ecKey
+	if apiKeySecret == "" {
+		return nil, fmt.Errorf("apiKeySecret cannot be empty")
 	}
 
 	return &Client{
-		apiKeyName: apiKeyName,
-		privateKey: privateKey,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		apiKeyName:   apiKeyName,
+		apiKeySecret: apiKeySecret,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
@@ -169,42 +128,36 @@ type coinbasePortfolioHoldingsResponse struct {
 	Data []coinbasePortfolioHoldings `json:"data"`
 }
 
+// GenerateJWT creates a JWT token for Coinbase Advanced Trade API authentication
+// Uses the official CDP SDK for JWT generation, which handles all the complexity
+// of CDP API v2 authentication format automatically
+// This method is exported for testing purposes
+func (c *Client) GenerateJWT(method, path string) (string, error) {
+	return c.generateJWT(method, path)
+}
+
 // generateJWT creates a JWT token for Coinbase Advanced Trade API authentication
-// The JWT must include the request URI in the payload for REST API requests
+// Uses the official CDP SDK which handles:
+// - Proper JWT claim structure (uris array, sub, iss, nbf, exp)
+// - Support for both ES256 and Ed25519 keys
+// - Correct header format (kid, no nonce for REST API)
+// See: https://docs.cdp.coinbase.com/api-reference/v2/authentication
 func (c *Client) generateJWT(method, path string) (string, error) {
-	now := time.Now()
-	
-	// Create URI claim: "{method} {host}{path}"
-	uri := fmt.Sprintf("%s api.coinbase.com%s", method, path)
-	
-	// Generate a random nonce
-	nonceBytes := make([]byte, 16)
-	if _, err := rand.Read(nonceBytes); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
-	nonce := fmt.Sprintf("%x", nonceBytes)
-	
-	// Create JWT claims
-	claims := jwt.MapClaims{
-		"sub": c.apiKeyName,                    // Subject: API key ID
-		"iss": "cdp",                           // Issuer: Coinbase Developer Platform
-		"nbf": now.Unix(),                      // Not before: current time
-		"exp": now.Unix() + 120,                // Expiration: 2 minutes from now
-		"uri": uri,                             // URI claim for REST API
-	}
-	
-	// Create token with headers
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
-	token.Header["kid"] = c.apiKeyName
-	token.Header["nonce"] = nonce
-	
-	// Sign the token
-	tokenString, err := token.SignedString(c.privateKey)
+	// Use CDP SDK to generate JWT
+	// For Advanced Trade API, host is api.coinbase.com
+	jwt, err := auth.GenerateJWT(auth.JwtOptions{
+		KeyID:         c.apiKeyName,
+		KeySecret:     c.apiKeySecret,
+		RequestMethod: method,
+		RequestHost:   "api.coinbase.com",
+		RequestPath:   path,
+		ExpiresIn:     120, // 2 minutes, default
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to sign JWT: %w", err)
+		return "", fmt.Errorf("failed to generate JWT using CDP SDK: %w", err)
 	}
-	
-	return tokenString, nil
+
+	return jwt, nil
 }
 
 // makeRequest makes an authenticated request to Coinbase API using JWT
