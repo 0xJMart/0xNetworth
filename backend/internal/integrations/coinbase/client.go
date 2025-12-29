@@ -456,19 +456,57 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 
 	log.Printf("Info: Found %d portfolios", len(portfolios))
 
+	// For each portfolio, get holdings directly
 	for _, portfolio := range portfolios {
-		portfolioInvestments, err := c.GetInvestments(portfolio.UUID)
-		if err == nil {
-			investments = append(investments, portfolioInvestments...)
-			log.Printf("Info: Got %d investments from portfolio %s", len(portfolioInvestments), portfolio.UUID)
-		} else {
+		log.Printf("Info: Fetching holdings for portfolio %s (%s)", portfolio.UUID, portfolio.Name)
+		holdings, err := c.GetPortfolioHoldings(portfolio.UUID)
+		if err != nil {
 			// Log but continue with other portfolios
 			if apiErr, ok := err.(*APIError); ok {
-				log.Printf("Warning: Failed to get investments for portfolio %s: %d - %s", portfolio.UUID, apiErr.StatusCode, apiErr.Message)
+				log.Printf("Warning: Failed to get holdings for portfolio %s: %d - %s", portfolio.UUID, apiErr.StatusCode, apiErr.Message)
 			} else {
-				log.Printf("Warning: Failed to get investments for portfolio %s: %v", portfolio.UUID, err)
+				log.Printf("Warning: Failed to get holdings for portfolio %s: %v", portfolio.UUID, err)
 			}
+			continue
 		}
+
+		log.Printf("Info: Found %d holdings in portfolio %s", len(holdings), portfolio.UUID)
+
+		// Convert holdings to investments
+		for _, holding := range holdings {
+			// Get current price for the product
+			price, err := c.GetProductPrice(holding.ProductID)
+			if err != nil {
+				log.Printf("Warning: Failed to get price for product %s: %v", holding.ProductID, err)
+				continue
+			}
+
+			quantity, _ := strconv.ParseFloat(holding.Quantity, 64)
+			value := quantity * price
+
+			// Parse product ID (format: BTC-USD, ETH-USD, etc.)
+			baseCurrency := holding.ProductID
+			if len(holding.ProductID) > 4 {
+				baseCurrency = holding.ProductID[:len(holding.ProductID)-4]
+			}
+
+			investment := &models.Investment{
+				ID:          fmt.Sprintf("%s-%s", portfolio.UUID, holding.ProductID),
+				AccountID:   portfolio.UUID,
+				Platform:    models.PlatformCoinbase,
+				Symbol:      baseCurrency,
+				Name:        baseCurrency,
+				Quantity:    quantity,
+				Value:       value,
+				Price:       price,
+				Currency:    "USD", // Coinbase typically uses USD as quote currency
+				AssetType:    "crypto",
+				LastUpdated: time.Now().UTC().Format(time.RFC3339),
+			}
+			investments = append(investments, investment)
+		}
+
+		log.Printf("Info: Converted %d holdings to investments from portfolio %s", len(holdings), portfolio.UUID)
 	}
 
 	log.Printf("Info: SyncAll completed - %d accounts, %d investments", len(accounts), len(investments))
