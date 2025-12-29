@@ -4,7 +4,6 @@ import { fetchPortfolios, fetchInvestments, fetchNetWorth } from './api';
 import NetWorthCard from './components/NetWorthCard';
 import PortfolioList from './components/PortfolioList';
 import InvestmentChart from './components/InvestmentChart';
-import InvestmentList from './components/InvestmentList';
 import PlatformCard from './components/PlatformCard';
 import SyncButton from './components/SyncButton';
 
@@ -137,7 +136,7 @@ function App() {
             <div className="mb-6">
               <PlatformCard
                 platform="coinbase"
-                accounts={coinbaseAccounts}
+                portfolios={coinbasePortfolios}
                 investments={coinbaseInvestments}
                 totalValue={coinbaseValue}
                 currency={networth?.currency || 'USD'}

@@ -1,4 +1,4 @@
-import { Investment } from '../types';
+import { Investment, Portfolio } from '../types';
 import {
   PieChart,
   Pie,
@@ -10,6 +10,7 @@ import {
 
 interface InvestmentChartProps {
   investments: Investment[];
+  portfolios: Portfolio[];
 }
 
 const COLORS = [
@@ -23,7 +24,7 @@ const COLORS = [
   '#84cc16', // lime
 ];
 
-export default function InvestmentChart({ investments }: InvestmentChartProps) {
+export default function InvestmentChart({ investments, portfolios }: InvestmentChartProps) {
   if (investments.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -35,20 +36,27 @@ export default function InvestmentChart({ investments }: InvestmentChartProps) {
     );
   }
 
-  // Group investments by asset type
-  const assetTypeData = investments.reduce((acc, inv) => {
-    const existing = acc.find((item) => item.name === inv.asset_type);
+  // Create a mapping from portfolio ID to portfolio name
+  const portfolioMap = new Map<string, string>();
+  portfolios.forEach((portfolio) => {
+    portfolioMap.set(portfolio.id, portfolio.name);
+  });
+
+  // Group investments by portfolio name
+  const portfolioData = investments.reduce((acc, inv) => {
+    const portfolioName = portfolioMap.get(inv.account_id) || `Unknown Portfolio (${inv.account_id})`;
+    const existing = acc.find((item) => item.name === portfolioName);
     if (existing) {
       existing.value += inv.value;
     } else {
-      acc.push({ name: inv.asset_type, value: inv.value });
+      acc.push({ name: portfolioName, value: inv.value });
     }
     return acc;
   }, [] as { name: string; value: number }[]);
 
   // Format for display
-  const chartData = assetTypeData.map((item) => ({
-    name: item.name.charAt(0).toUpperCase() + item.name.slice(1),
+  const chartData = portfolioData.map((item) => ({
+    name: item.name,
     value: item.value,
   }));
 
