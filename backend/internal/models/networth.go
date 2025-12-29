@@ -13,7 +13,7 @@ type NetWorth struct {
 // NetWorthBreakdown provides detailed breakdown of net worth
 type NetWorthBreakdown struct {
 	NetWorth
-	Accounts   []*Account   `json:"accounts"`
+	Portfolios  []*Portfolio  `json:"portfolios"`
 	Investments []*Investment `json:"investments"`
 }
 

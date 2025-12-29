@@ -29,12 +29,12 @@ func (h *InvestmentsHandler) GetInvestments(c *gin.Context) {
 	})
 }
 
-// GetInvestmentsByAccount returns investments for a specific account
-func (h *InvestmentsHandler) GetInvestmentsByAccount(c *gin.Context) {
-	accountID := c.Param("accountId")
-	investments := h.store.GetInvestmentsByAccount(accountID)
+// GetInvestmentsByPortfolio returns investments for a specific portfolio
+func (h *InvestmentsHandler) GetInvestmentsByPortfolio(c *gin.Context) {
+	portfolioID := c.Param("portfolioId")
+	investments := h.store.GetInvestmentsByAccount(portfolioID) // AccountID field is actually portfolio ID
 	c.JSON(http.StatusOK, gin.H{
-		"account_id": accountID,
+		"portfolio_id": portfolioID,
 		"investments": investments,
 	})
 }

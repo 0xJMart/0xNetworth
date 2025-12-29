@@ -1,12 +1,10 @@
 export type Platform = 'coinbase';
 
-export interface Account {
+export interface Portfolio {
   id: string;
   platform: Platform;
   name: string;
-  balance: number;
-  currency: string;
-  account_type?: string;
+  type?: string;
   last_synced?: string;
 }
 
@@ -35,25 +33,25 @@ export interface NetWorth {
 
 export interface NetWorthBreakdown {
   networth: NetWorth;
-  accounts: Account[];
+  portfolios: Portfolio[];
   investments: Investment[];
-}
-
-export interface AccountsResponse {
-  accounts: Account[];
 }
 
 export interface InvestmentsResponse {
   investments: Investment[];
 }
 
-export interface PlatformAccountsResponse {
-  platform: Platform;
-  accounts: Account[];
-}
-
 export interface PlatformInvestmentsResponse {
   platform: Platform;
   investments: Investment[];
+}
+
+export interface PortfoliosResponse {
+  portfolios: Portfolio[];
+}
+
+export interface PlatformPortfoliosResponse {
+  platform: Platform;
+  portfolios: Portfolio[];
 }
 

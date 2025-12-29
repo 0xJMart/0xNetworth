@@ -37,12 +37,10 @@ func (h *SyncHandler) SyncAll(c *gin.Context) {
 	}
 
 	// Sync from Coinbase
-	accounts, investments, err := h.coinbaseClient.SyncAll()
+	portfolios, investments, err := h.coinbaseClient.SyncAll()
 	if err != nil {
 		log.Printf("Error syncing from Coinbase: %v", err)
 		// Check if it's a 403 error from Coinbase API
-		// Note: We need to check the error type - APIError is in the coinbase package
-		// Since we can't import it directly, we'll check the error message
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "403") || strings.Contains(errMsg, "forbidden") {
 			log.Printf("Coinbase API returned 403 Forbidden: %s", errMsg)
@@ -57,9 +55,9 @@ func (h *SyncHandler) SyncAll(c *gin.Context) {
 		return
 	}
 
-	// Store accounts
-	for _, account := range accounts {
-		h.store.CreateOrUpdateAccount(account)
+	// Store portfolios
+	for _, portfolio := range portfolios {
+		h.store.CreateOrUpdatePortfolio(portfolio)
 	}
 
 	// Store investments
@@ -74,7 +72,7 @@ func (h *SyncHandler) SyncAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "sync completed successfully",
 		"last_sync": h.store.GetLastSyncTime().Format(time.RFC3339),
-		"accounts_synced": len(accounts),
+		"portfolios_synced": len(portfolios),
 		"investments_synced": len(investments),
 	})
 }
@@ -99,7 +97,7 @@ func (h *SyncHandler) SyncPlatform(c *gin.Context) {
 	}
 
 	// Sync from Coinbase
-	accounts, investments, err := h.coinbaseClient.SyncAll()
+	portfolios, investments, err := h.coinbaseClient.SyncAll()
 	if err != nil {
 		log.Printf("Error syncing from Coinbase: %v", err)
 		// Check if it's a 403 error from Coinbase API
@@ -117,9 +115,9 @@ func (h *SyncHandler) SyncPlatform(c *gin.Context) {
 		return
 	}
 
-	// Store accounts
-	for _, account := range accounts {
-		h.store.CreateOrUpdateAccount(account)
+	// Store portfolios
+	for _, portfolio := range portfolios {
+		h.store.CreateOrUpdatePortfolio(portfolio)
 	}
 
 	// Store investments
@@ -135,7 +133,7 @@ func (h *SyncHandler) SyncPlatform(c *gin.Context) {
 		"message":   "sync completed successfully for " + platformStr,
 		"platform":  platformStr,
 		"last_sync": h.store.GetLastSyncTime().Format(time.RFC3339),
-		"accounts_synced": len(accounts),
+		"portfolios_synced": len(portfolios),
 		"investments_synced": len(investments),
 	})
 }

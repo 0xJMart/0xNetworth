@@ -44,7 +44,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	accountsHandler := handlers.NewAccountsHandler(store)
+	portfoliosHandler := handlers.NewPortfoliosHandler(store)
 	investmentsHandler := handlers.NewInvestmentsHandler(store)
 	networthHandler := handlers.NewNetWorthHandler(store)
 	syncHandler := handlers.NewSyncHandler(store, coinbaseClient)
@@ -98,14 +98,14 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
-		// Account routes
-		api.GET("/accounts", accountsHandler.GetAccounts)
-		api.GET("/accounts/platform/:platform", accountsHandler.GetAccountsByPlatform)
-		api.GET("/accounts/:id", accountsHandler.GetAccount)
+		// Portfolio routes
+		api.GET("/portfolios", portfoliosHandler.GetPortfolios)
+		api.GET("/portfolios/platform/:platform", portfoliosHandler.GetPortfoliosByPlatform)
+		api.GET("/portfolios/:id", portfoliosHandler.GetPortfolio)
 
 		// Investment routes
 		api.GET("/investments", investmentsHandler.GetInvestments)
-		api.GET("/investments/account/:accountId", investmentsHandler.GetInvestmentsByAccount)
+		api.GET("/investments/portfolio/:portfolioId", investmentsHandler.GetInvestmentsByPortfolio)
 		api.GET("/investments/platform/:platform", investmentsHandler.GetInvestmentsByPlatform)
 
 		// Net worth routes

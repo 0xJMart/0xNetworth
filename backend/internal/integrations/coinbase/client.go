@@ -61,22 +61,6 @@ func NewClient(apiKeyName, apiKeySecret string) (*Client, error) {
 }
 
 // Coinbase API Response Types
-type coinbaseAccount struct {
-	UUID        string `json:"uuid"`
-	Name        string `json:"name"`
-	Currency    string `json:"currency"`
-	Available   string `json:"available_balance"`
-	Hold        string `json:"hold_balance"`
-	Type        string `json:"type"`
-	Active      bool   `json:"active"`
-}
-
-type coinbaseAccountsResponse struct {
-	Accounts []coinbaseAccount `json:"accounts"`
-	// Some API versions might return data directly
-	Data []coinbaseAccount `json:"data"`
-}
-
 type coinbasePortfolio struct {
 	UUID     string `json:"uuid"`
 	Name     string `json:"name"`
@@ -244,58 +228,6 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 	return resp, nil
 }
 
-// GetAccounts fetches accounts from Coinbase
-func (c *Client) GetAccounts() ([]*models.Account, error) {
-	resp, err := c.makeRequest("GET", "/brokerage/accounts", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch accounts: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, &APIError{
-			StatusCode: resp.StatusCode,
-			Message:    string(bodyBytes),
-		}
-	}
-
-	var apiResp coinbaseAccountsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Handle different response formats
-	accountList := apiResp.Accounts
-	if len(accountList) == 0 {
-		accountList = apiResp.Data
-	}
-
-	accounts := make([]*models.Account, 0, len(accountList))
-	for _, acc := range accountList {
-		if !acc.Active {
-			continue
-		}
-
-		available, _ := strconv.ParseFloat(acc.Available, 64)
-		hold, _ := strconv.ParseFloat(acc.Hold, 64)
-		balance := available + hold
-
-		account := &models.Account{
-			ID:          acc.UUID,
-			Platform:    models.PlatformCoinbase,
-			Name:        acc.Name,
-			Balance:     balance,
-			Currency:    acc.Currency,
-			AccountType: acc.Type,
-			LastSynced:  time.Now().UTC().Format(time.RFC3339),
-		}
-		accounts = append(accounts, account)
-	}
-
-	return accounts, nil
-}
-
 // GetPortfolios fetches portfolios from Coinbase
 func (c *Client) GetPortfolios() ([]coinbasePortfolio, error) {
 	resp, err := c.makeRequest("GET", "/brokerage/portfolios", nil)
@@ -444,40 +376,13 @@ func (c *Client) GetInvestments(accountID string) ([]*models.Investment, error) 
 	return investments, nil
 }
 
-// SyncAccount syncs a specific account from Coinbase
-func (c *Client) SyncAccount(accountID string) error {
-	// This is a placeholder - in a full implementation, we might want to
-	// sync a specific account. For now, we'll sync all accounts.
-	_, err := c.GetAccounts()
-	return err
-}
-
-// SyncAll syncs all accounts and investments from Coinbase
-// Handles cases where account access is restricted (e.g., Portfolio primary view access only)
-func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
+// SyncAll syncs all portfolios and investments from Coinbase
+// Uses Portfolio primary view access which is the standard for Coinbase Advanced Trade
+func (c *Client) SyncAll() ([]*models.Portfolio, []*models.Investment, error) {
 	log.Printf("SyncAll: Starting sync with API key: %s", c.apiKeyName)
-	
-	// Try to get accounts, but don't fail if we get 403 (forbidden)
-	// This handles cases where the API key only has "Portfolio primary view access"
-	accounts := make([]*models.Account, 0)
-	log.Printf("SyncAll: Attempting to fetch accounts...")
-	accountsResp, err := c.GetAccounts()
-	if err != nil {
-		// Check if it's a 403/forbidden error
-		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == http.StatusForbidden {
-			// This is expected for "Portfolio primary view access" - continue with portfolios
-			log.Printf("Info: Account access forbidden (expected with Portfolio primary view access), continuing with portfolios. Error: %s", apiErr.Message)
-		} else {
-			// For other errors, log but continue
-			log.Printf("Warning: Failed to get accounts (may be expected with limited permissions): %v", err)
-		}
-	} else {
-		accounts = accountsResp
-		log.Printf("SyncAll: Successfully fetched %d accounts", len(accounts))
-	}
 
-	// Get investments from all portfolios
-	// This should work with "Portfolio primary view access"
+	// Get portfolios and investments
+	// This works with "Portfolio primary view access"
 	investments := make([]*models.Investment, 0)
 	log.Printf("SyncAll: Attempting to fetch portfolios...")
 	portfolios, err := c.GetPortfolios()
@@ -488,10 +393,22 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 		} else {
 			log.Printf("Error: Failed to get portfolios: %v", err)
 		}
-		return accounts, investments, fmt.Errorf("failed to get portfolios: %w", err)
+		return nil, investments, fmt.Errorf("failed to get portfolios: %w", err)
 	}
 
 	log.Printf("Info: Found %d portfolios", len(portfolios))
+
+	// Convert portfolios to models
+	portfolioModels := make([]*models.Portfolio, 0, len(portfolios))
+	for _, p := range portfolios {
+		portfolioModels = append(portfolioModels, &models.Portfolio{
+			ID:         p.UUID,
+			Platform:   models.PlatformCoinbase,
+			Name:       p.Name,
+			Type:       p.Type,
+			LastSynced: time.Now().UTC().Format(time.RFC3339),
+		})
+	}
 
 	// For each portfolio, get holdings directly
 	for _, portfolio := range portfolios {
@@ -551,6 +468,6 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 		log.Printf("Info: Converted %d spot positions to investments from portfolio %s", len(holdings), portfolio.UUID)
 	}
 
-	log.Printf("Info: SyncAll completed - %d accounts, %d investments", len(accounts), len(investments))
-	return accounts, investments, nil
+	log.Printf("Info: SyncAll completed - %d portfolios, %d investments", len(portfolioModels), len(investments))
+	return portfolioModels, investments, nil
 }

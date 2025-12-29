@@ -10,7 +10,7 @@ import (
 // Store is an in-memory store for investment data
 type Store struct {
 	mu          sync.RWMutex
-	accounts    map[string]*models.Account
+	portfolios  map[string]*models.Portfolio
 	investments map[string]*models.Investment
 	networth    *models.NetWorth
 	lastSync    time.Time
@@ -19,66 +19,66 @@ type Store struct {
 // NewStore creates a new in-memory store
 func NewStore() *Store {
 	return &Store{
-		accounts:    make(map[string]*models.Account),
+		portfolios:  make(map[string]*models.Portfolio),
 		investments: make(map[string]*models.Investment),
 		networth:    &models.NetWorth{},
 	}
 }
 
-// Account operations
+// Portfolio operations
 
-// GetAllAccounts returns all accounts
-func (s *Store) GetAllAccounts() []*models.Account {
+// GetAllPortfolios returns all portfolios
+func (s *Store) GetAllPortfolios() []*models.Portfolio {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	accounts := make([]*models.Account, 0, len(s.accounts))
-	for _, a := range s.accounts {
-		accounts = append(accounts, a)
+	portfolios := make([]*models.Portfolio, 0, len(s.portfolios))
+	for _, p := range s.portfolios {
+		portfolios = append(portfolios, p)
 	}
-	return accounts
+	return portfolios
 }
 
-// GetAccountsByPlatform returns accounts for a specific platform
-func (s *Store) GetAccountsByPlatform(platform models.Platform) []*models.Account {
+// GetPortfoliosByPlatform returns portfolios for a specific platform
+func (s *Store) GetPortfoliosByPlatform(platform models.Platform) []*models.Portfolio {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	accounts := make([]*models.Account, 0)
-	for _, a := range s.accounts {
-		if a.Platform == platform {
-			accounts = append(accounts, a)
+	portfolios := make([]*models.Portfolio, 0)
+	for _, p := range s.portfolios {
+		if p.Platform == platform {
+			portfolios = append(portfolios, p)
 		}
 	}
-	return accounts
+	return portfolios
 }
 
-// GetAccountByID returns an account by ID
-func (s *Store) GetAccountByID(id string) (*models.Account, bool) {
+// GetPortfolioByID returns a portfolio by ID
+func (s *Store) GetPortfolioByID(id string) (*models.Portfolio, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	account, exists := s.accounts[id]
-	return account, exists
+	portfolio, exists := s.portfolios[id]
+	return portfolio, exists
 }
 
-// CreateOrUpdateAccount creates or updates an account
-func (s *Store) CreateOrUpdateAccount(account *models.Account) {
+// CreateOrUpdatePortfolio creates or updates a portfolio
+func (s *Store) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.accounts[account.ID] = account
+	s.portfolios[portfolio.ID] = portfolio
 }
 
-// DeleteAccount deletes an account by ID
-func (s *Store) DeleteAccount(id string) bool {
+// DeletePortfolio deletes a portfolio by ID
+func (s *Store) DeletePortfolio(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.accounts[id]; !exists {
+	if _, exists := s.portfolios[id]; !exists {
 		return false
 	}
-	delete(s.accounts, id)
+	delete(s.portfolios, id)
 	return true
 }
 
@@ -176,16 +176,8 @@ func (s *Store) RecalculateNetWorth() {
 		LastCalculated: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Calculate total from accounts
+	// Calculate total from investments (portfolios don't have balances, only holdings)
 	totalValue := 0.0
-	accountCount := 0
-	for _, account := range s.accounts {
-		totalValue += account.Balance
-		networth.ByPlatform[account.Platform] += account.Balance
-		accountCount++
-	}
-
-	// Add investment values
 	for _, investment := range s.investments {
 		totalValue += investment.Value
 		networth.ByPlatform[investment.Platform] += investment.Value
@@ -193,7 +185,7 @@ func (s *Store) RecalculateNetWorth() {
 	}
 
 	networth.TotalValue = totalValue
-	networth.AccountCount = accountCount
+	networth.AccountCount = len(s.portfolios) // Use portfolio count instead of account count
 	s.networth = networth
 }
 

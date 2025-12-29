@@ -1,13 +1,13 @@
 import {
-  Account,
-  AccountsResponse,
   Investment,
   InvestmentsResponse,
   NetWorth,
   NetWorthBreakdown,
   Platform,
-  PlatformAccountsResponse,
   PlatformInvestmentsResponse,
+  Portfolio,
+  PortfoliosResponse,
+  PlatformPortfoliosResponse,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -33,19 +33,19 @@ async function postAPI<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
-// Account API
-export async function fetchAccounts(): Promise<Account[]> {
-  const data: AccountsResponse = await fetchAPI('/accounts');
-  return data.accounts;
+// Portfolio API
+export async function fetchPortfolios(): Promise<Portfolio[]> {
+  const data: PortfoliosResponse = await fetchAPI('/portfolios');
+  return data.portfolios;
 }
 
-export async function fetchAccount(id: string): Promise<Account> {
-  return fetchAPI(`/accounts/${id}`);
+export async function fetchPortfolio(id: string): Promise<Portfolio> {
+  return fetchAPI(`/portfolios/${id}`);
 }
 
-export async function fetchAccountsByPlatform(platform: Platform): Promise<Account[]> {
-  const data: PlatformAccountsResponse = await fetchAPI(`/accounts/platform/${platform}`);
-  return data.accounts;
+export async function fetchPortfoliosByPlatform(platform: Platform): Promise<Portfolio[]> {
+  const data: PlatformPortfoliosResponse = await fetchAPI(`/portfolios/platform/${platform}`);
+  return data.portfolios;
 }
 
 // Investment API
@@ -54,8 +54,8 @@ export async function fetchInvestments(): Promise<Investment[]> {
   return data.investments;
 }
 
-export async function fetchInvestmentsByAccount(accountId: string): Promise<Investment[]> {
-  const data: InvestmentsResponse = await fetchAPI(`/investments/account/${accountId}`);
+export async function fetchInvestmentsByPortfolio(portfolioId: string): Promise<Investment[]> {
+  const data: InvestmentsResponse = await fetchAPI(`/investments/portfolio/${portfolioId}`);
   return data.investments;
 }
 

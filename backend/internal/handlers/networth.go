@@ -33,12 +33,12 @@ func (h *NetWorthHandler) GetNetWorthBreakdown(c *gin.Context) {
 	// Recalculate before returning
 	h.store.RecalculateNetWorth()
 	networth := h.store.GetNetWorth()
-	accounts := h.store.GetAllAccounts()
+	portfolios := h.store.GetAllPortfolios()
 	investments := h.store.GetAllInvestments()
 
 	c.JSON(http.StatusOK, gin.H{
 		"networth":   networth,
-		"accounts":   accounts,
+		"portfolios": portfolios,
 		"investments": investments,
 	})
 }

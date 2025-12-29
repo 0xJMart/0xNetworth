@@ -10,7 +10,7 @@ backend/
 │   └── server/          # Main server application
 │       └── main.go
 ├── internal/
-│   ├── models/         # Data models (Account, Investment, NetWorth, Transaction)
+│   ├── models/         # Data models (Portfolio, Investment, NetWorth, Transaction)
 │   ├── handlers/        # HTTP request handlers
 │   ├── store/          # In-memory data store
 │   └── integrations/   # External API clients
@@ -56,14 +56,14 @@ COINBASE_API_SECRET=your_api_secret
 ### Health Check
 - `GET /api/health` - Health check endpoint
 
-### Accounts
-- `GET /api/accounts` - Get all accounts
-- `GET /api/accounts/platform/:platform` - Get accounts by platform (coinbase)
-- `GET /api/accounts/:id` - Get account by ID
+### Portfolios
+- `GET /api/portfolios` - Get all portfolios
+- `GET /api/portfolios/platform/:platform` - Get portfolios by platform (coinbase)
+- `GET /api/portfolios/:id` - Get portfolio by ID
 
 ### Investments
 - `GET /api/investments` - Get all investments
-- `GET /api/investments/account/:accountId` - Get investments by account ID
+- `GET /api/investments/portfolio/:portfolioId` - Get investments by portfolio ID
 - `GET /api/investments/platform/:platform` - Get investments by platform
 
 ### Net Worth

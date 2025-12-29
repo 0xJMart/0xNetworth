@@ -1,8 +1,8 @@
-import { Account, Investment, Platform } from '../types';
+import { Investment, Platform, Portfolio } from '../types';
 
 interface PlatformCardProps {
   platform: Platform;
-  accounts: Account[];
+  portfolios: Portfolio[];
   investments: Investment[];
   totalValue: number;
   currency: string;
@@ -10,7 +10,7 @@ interface PlatformCardProps {
 
 export default function PlatformCard({
   platform,
-  accounts,
+  portfolios,
   investments,
   totalValue,
   currency,
@@ -42,7 +42,6 @@ export default function PlatformCard({
     }
   };
 
-  const accountBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
   const investmentValue = investments.reduce((sum, inv) => sum + inv.value, 0);
 
   return (
@@ -57,8 +56,8 @@ export default function PlatformCard({
           <div className="text-sm text-gray-600 mb-2">Summary</div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-xs text-gray-500">Accounts</div>
-              <div className="text-lg font-semibold text-gray-900">{accounts.length}</div>
+              <div className="text-xs text-gray-500">Portfolios</div>
+              <div className="text-lg font-semibold text-gray-900">{portfolios.length}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">Holdings</div>
@@ -70,10 +69,6 @@ export default function PlatformCard({
         <div className="border-t border-gray-200 pt-4">
           <div className="text-sm text-gray-600 mb-2">Breakdown</div>
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-700">Account Balances</span>
-              <span className="font-medium text-gray-900">{formatCurrency(accountBalance, currency)}</span>
-            </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-700">Investment Value</span>
               <span className="font-medium text-gray-900">{formatCurrency(investmentValue, currency)}</span>

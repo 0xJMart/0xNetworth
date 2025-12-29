@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Account, Investment, NetWorth, Platform } from './types';
-import { fetchAccounts, fetchInvestments, fetchNetWorth } from './api';
+import { Portfolio, Investment, NetWorth, Platform } from './types';
+import { fetchPortfolios, fetchInvestments, fetchNetWorth } from './api';
 import NetWorthCard from './components/NetWorthCard';
-import AccountList from './components/AccountList';
+import PortfolioList from './components/PortfolioList';
 import InvestmentChart from './components/InvestmentChart';
+import InvestmentList from './components/InvestmentList';
 import PlatformCard from './components/PlatformCard';
 import SyncButton from './components/SyncButton';
 
 function App() {
   const [networth, setNetworth] = useState<NetWorth | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,14 +21,14 @@ function App() {
       setLoading(true);
       setError(null);
 
-      const [networthData, accountsData, investmentsData] = await Promise.all([
+      const [networthData, portfoliosData, investmentsData] = await Promise.all([
         fetchNetWorth(),
-        fetchAccounts(),
+        fetchPortfolios(),
         fetchInvestments(),
       ]);
 
       setNetworth(networthData);
-      setAccounts(accountsData);
+      setPortfolios(portfoliosData);
       setInvestments(investmentsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -44,19 +45,17 @@ function App() {
     loadData();
   };
 
-  const filteredAccounts = selectedPlatform
-    ? accounts.filter((acc) => acc.platform === selectedPlatform)
-    : accounts;
+  const filteredPortfolios = selectedPlatform
+    ? portfolios.filter((port) => port.platform === selectedPlatform)
+    : portfolios;
 
   const filteredInvestments = selectedPlatform
     ? investments.filter((inv) => inv.platform === selectedPlatform)
     : investments;
 
-  const coinbaseAccounts = accounts.filter((acc) => acc.platform === 'coinbase');
+  const coinbasePortfolios = portfolios.filter((port) => port.platform === 'coinbase');
   const coinbaseInvestments = investments.filter((inv) => inv.platform === 'coinbase');
-  const coinbaseValue =
-    coinbaseAccounts.reduce((sum, acc) => sum + acc.balance, 0) +
-    coinbaseInvestments.reduce((sum, inv) => sum + inv.value, 0);
+  const coinbaseValue = coinbaseInvestments.reduce((sum, inv) => sum + inv.value, 0);
 
   const platforms: Platform[] = ['coinbase'];
 
@@ -145,17 +144,14 @@ function App() {
               />
             </div>
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Accounts */}
-              <div>
-                <AccountList accounts={filteredAccounts} />
-              </div>
+            {/* Investment Chart */}
+            <div className="mb-6">
+              <InvestmentChart investments={filteredInvestments} />
+            </div>
 
-              {/* Investment Chart */}
-              <div>
-                <InvestmentChart investments={filteredInvestments} />
-              </div>
+            {/* Portfolios with Holdings */}
+            <div className="mb-6">
+              <PortfolioList portfolios={filteredPortfolios} investments={filteredInvestments} />
             </div>
           </>
         )}
