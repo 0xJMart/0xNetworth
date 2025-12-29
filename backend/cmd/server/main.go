@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"0xnetworth/backend/internal/handlers"
 	"0xnetworth/backend/internal/integrations/coinbase"
@@ -53,7 +54,35 @@ func main() {
 
 	// CORS configuration
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:5173", "http://localhost:3000"}
+	// Read allowed origins from environment variable, with fallback to defaults
+	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if corsOrigins == "" {
+		// Default: allow all localhost origins (any port) for development/port-forwarding
+		// This makes it work regardless of which port you use for port-forwarding
+		config.AllowOriginFunc = func(origin string) bool {
+			// Allow all localhost origins (any port)
+			if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "https://localhost:") {
+				return true
+			}
+			// Also allow the standard development ports explicitly
+			return origin == "http://localhost:5173" || origin == "http://localhost:3000"
+		}
+	} else {
+		// Parse comma-separated origins
+		origins := []string{}
+		for _, origin := range strings.Split(corsOrigins, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				origins = append(origins, origin)
+			}
+		}
+		if len(origins) > 0 {
+			config.AllowOrigins = origins
+		} else {
+			// If empty after parsing, allow all origins (for development)
+			config.AllowAllOrigins = true
+		}
+	}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 	router.Use(cors.New(config))

@@ -49,6 +49,9 @@ backend:
   # Example:
   # - name: PORT
   #   value: "8080"
+  # CORS allowed origins (comma-separated)
+  # If not set, defaults to localhost for development
+  corsAllowedOrigins: ""
 
 # Frontend configuration
 frontend:
