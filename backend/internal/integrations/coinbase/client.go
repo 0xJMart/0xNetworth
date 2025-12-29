@@ -128,6 +128,37 @@ type coinbasePortfolioHoldingsResponse struct {
 	Data []coinbasePortfolioHoldings `json:"data"`
 }
 
+// Portfolio Breakdown Response Types (using the correct API endpoint)
+type coinbaseSpotPosition struct {
+	Asset                    string  `json:"asset"`
+	AccountUUID              string  `json:"account_uuid"`
+	TotalBalanceFiat         float64 `json:"total_balance_fiat"`
+	TotalBalanceCrypto       float64 `json:"total_balance_crypto"`
+	AvailableToTradeFiat     float64 `json:"available_to_trade_fiat"`
+	AvailableToTradeCrypto   float64 `json:"available_to_trade_crypto"`
+	AverageEntryPrice        struct {
+		Value    string `json:"value"`
+		Currency string `json:"currency"`
+	} `json:"average_entry_price"`
+	AssetUUID string `json:"asset_uuid"`
+	IsCash    bool   `json:"is_cash"`
+}
+
+type coinbasePortfolioBreakdown struct {
+	Portfolio struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+		Type string `json:"type"`
+	} `json:"portfolio"`
+	SpotPositions []coinbaseSpotPosition `json:"spot_positions"`
+	PerpPositions []interface{}          `json:"perp_positions"`
+	FuturesPositions []interface{}       `json:"futures_positions"`
+}
+
+type coinbasePortfolioBreakdownResponse struct {
+	Breakdown coinbasePortfolioBreakdown `json:"breakdown"`
+}
+
 // GenerateJWT creates a JWT token for Coinbase Advanced Trade API authentication
 // Uses the official CDP SDK for JWT generation, which handles all the complexity
 // of CDP API v2 authentication format automatically
@@ -293,12 +324,14 @@ func (c *Client) GetPortfolios() ([]coinbasePortfolio, error) {
 	return apiResp.Data, nil
 }
 
-// GetPortfolioHoldings fetches holdings for a specific portfolio
-func (c *Client) GetPortfolioHoldings(portfolioID string) ([]coinbasePortfolioHoldings, error) {
-	path := fmt.Sprintf("/brokerage/portfolios/%s/holdings", portfolioID)
+// GetPortfolioHoldings fetches holdings for a specific portfolio using the Portfolio Breakdown endpoint
+// This endpoint returns spot_positions which contain the actual holdings/assets in the portfolio
+func (c *Client) GetPortfolioHoldings(portfolioID string) ([]coinbaseSpotPosition, error) {
+	// Use the correct endpoint: GET /api/v3/brokerage/portfolios/{portfolio_uuid}
+	path := fmt.Sprintf("/brokerage/portfolios/%s", portfolioID)
 	resp, err := c.makeRequest("GET", path, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch portfolio holdings: %w", err)
+		return nil, fmt.Errorf("failed to fetch portfolio breakdown: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -310,16 +343,20 @@ func (c *Client) GetPortfolioHoldings(portfolioID string) ([]coinbasePortfolioHo
 		}
 	}
 
-	var apiResp coinbasePortfolioHoldingsResponse
+	var apiResp coinbasePortfolioBreakdownResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode portfolio breakdown response: %w", err)
 	}
 
-	// Handle different response formats
-	if len(apiResp.Holdings) > 0 {
-		return apiResp.Holdings, nil
+	// Return spot positions (filter out cash positions)
+	positions := []coinbaseSpotPosition{}
+	for _, pos := range apiResp.Breakdown.SpotPositions {
+		if !pos.IsCash {
+			positions = append(positions, pos)
+		}
 	}
-	return apiResp.Data, nil
+
+	return positions, nil
 }
 
 // GetProductPrice fetches current price for a product
@@ -370,33 +407,33 @@ func (c *Client) GetInvestments(accountID string) ([]*models.Investment, error) 
 			continue
 		}
 
-		for _, holding := range holdings {
-			// Get current price for the product
-			price, err := c.GetProductPrice(holding.ProductID)
-			if err != nil {
-				// If we can't get price, skip this holding
+		for _, position := range holdings {
+			// Use the asset symbol (e.g., "BTC", "ETH")
+			symbol := position.Asset
+			
+			// Calculate price from average entry price if available
+			var price float64
+			if position.AverageEntryPrice.Value != "" {
+				price, _ = strconv.ParseFloat(position.AverageEntryPrice.Value, 64)
+			} else if position.TotalBalanceCrypto > 0 {
+				price = position.TotalBalanceFiat / position.TotalBalanceCrypto
+			} else {
 				continue
 			}
 
-			quantity, _ := strconv.ParseFloat(holding.Quantity, 64)
-			value := quantity * price
-
-			// Parse product ID (format: BTC-USD, ETH-USD, etc.)
-			baseCurrency := holding.ProductID
-			if len(holding.ProductID) > 4 {
-				baseCurrency = holding.ProductID[:len(holding.ProductID)-4]
-			}
+			quantity := position.TotalBalanceCrypto
+			value := position.TotalBalanceFiat
 
 			investment := &models.Investment{
-				ID:          fmt.Sprintf("%s-%s", portfolio.UUID, holding.ProductID),
+				ID:          fmt.Sprintf("%s-%s", portfolio.UUID, position.AssetUUID),
 				AccountID:   portfolio.UUID,
 				Platform:    models.PlatformCoinbase,
-				Symbol:      baseCurrency,
-				Name:        baseCurrency,
+				Symbol:      symbol,
+				Name:        symbol,
 				Quantity:    quantity,
 				Value:       value,
 				Price:       price,
-				Currency:    "USD", // Coinbase typically uses USD as quote currency
+				Currency:    "USD",
 				AssetType:    "crypto",
 				LastUpdated: time.Now().UTC().Format(time.RFC3339),
 			}
@@ -470,43 +507,48 @@ func (c *Client) SyncAll() ([]*models.Account, []*models.Investment, error) {
 			continue
 		}
 
-		log.Printf("Info: Found %d holdings in portfolio %s", len(holdings), portfolio.UUID)
+		log.Printf("Info: Found %d spot positions in portfolio %s", len(holdings), portfolio.UUID)
 
-		// Convert holdings to investments
-		for _, holding := range holdings {
-			// Get current price for the product
-			price, err := c.GetProductPrice(holding.ProductID)
-			if err != nil {
-				log.Printf("Warning: Failed to get price for product %s: %v", holding.ProductID, err)
+		// Convert spot positions to investments
+		for _, position := range holdings {
+			// Use the asset symbol as the symbol (e.g., "BTC", "ETH")
+			symbol := position.Asset
+			
+			// Calculate price from average entry price if available, otherwise use current balance
+			var price float64
+			if position.AverageEntryPrice.Value != "" {
+				price, _ = strconv.ParseFloat(position.AverageEntryPrice.Value, 64)
+			} else if position.TotalBalanceCrypto > 0 {
+				// Fallback: calculate price from fiat balance / crypto balance
+				price = position.TotalBalanceFiat / position.TotalBalanceCrypto
+			} else {
+				// If no price available, skip this position
+				log.Printf("Warning: No price available for asset %s, skipping", symbol)
 				continue
 			}
 
-			quantity, _ := strconv.ParseFloat(holding.Quantity, 64)
-			value := quantity * price
-
-			// Parse product ID (format: BTC-USD, ETH-USD, etc.)
-			baseCurrency := holding.ProductID
-			if len(holding.ProductID) > 4 {
-				baseCurrency = holding.ProductID[:len(holding.ProductID)-4]
-			}
+			// Use total balance in crypto as quantity
+			quantity := position.TotalBalanceCrypto
+			value := position.TotalBalanceFiat
 
 			investment := &models.Investment{
-				ID:          fmt.Sprintf("%s-%s", portfolio.UUID, holding.ProductID),
+				ID:          fmt.Sprintf("%s-%s", portfolio.UUID, position.AssetUUID),
 				AccountID:   portfolio.UUID,
 				Platform:    models.PlatformCoinbase,
-				Symbol:      baseCurrency,
-				Name:        baseCurrency,
+				Symbol:      symbol,
+				Name:        symbol,
 				Quantity:    quantity,
 				Value:       value,
 				Price:       price,
-				Currency:    "USD", // Coinbase typically uses USD as quote currency
+				Currency:    "USD", // Portfolio breakdown returns values in USD
 				AssetType:    "crypto",
 				LastUpdated: time.Now().UTC().Format(time.RFC3339),
 			}
 			investments = append(investments, investment)
+			log.Printf("Info: Added investment: %s - Quantity: %f, Value: $%.2f", symbol, quantity, value)
 		}
 
-		log.Printf("Info: Converted %d holdings to investments from portfolio %s", len(holdings), portfolio.UUID)
+		log.Printf("Info: Converted %d spot positions to investments from portfolio %s", len(holdings), portfolio.UUID)
 	}
 
 	log.Printf("Info: SyncAll completed - %d accounts, %d investments", len(accounts), len(investments))
