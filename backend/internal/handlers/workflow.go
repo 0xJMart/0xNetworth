@@ -252,6 +252,23 @@ func (h *WorkflowHandler) TestYouTubeSource(c *gin.Context) {
 	})
 }
 
+// TriggerAllSources handles POST /api/workflow/sources/trigger-all
+func (h *WorkflowHandler) TriggerAllSources(c *gin.Context) {
+	if h.scheduler == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Scheduler not available"})
+		return
+	}
+	
+	triggered := h.scheduler.TriggerAllSources()
+	
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Triggered %d source(s)", len(triggered)),
+		"triggered_sources": triggered,
+		"count": len(triggered),
+	})
+}
+
 // GetTranscript handles GET /api/workflow/transcripts/:id
 func (h *WorkflowHandler) GetTranscript(c *gin.Context) {
 	id := c.Param("id")

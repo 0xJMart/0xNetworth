@@ -308,6 +308,24 @@ func (s *Scheduler) TriggerSourceManually(sourceID string) error {
 	return nil
 }
 
+// TriggerAllSources triggers workflow execution for all enabled sources immediately
+func (s *Scheduler) TriggerAllSources() []string {
+	sources := s.store.GetAllYouTubeSources()
+	triggered := make([]string, 0)
+	
+	for _, source := range sources {
+		if !source.Enabled {
+			continue
+		}
+		
+		go s.executeSource(source.ID, source.URL)
+		triggered = append(triggered, source.ID)
+		log.Printf("Manually triggered source: %s (%s)", source.Name, source.ID)
+	}
+	
+	return triggered
+}
+
 // SourceNotFoundError represents an error when a source is not found
 type SourceNotFoundError struct {
 	SourceID string

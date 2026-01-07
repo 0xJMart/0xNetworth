@@ -250,3 +250,26 @@ export async function testYouTubeSource(url: string): Promise<TestYouTubeSourceR
   return response.json();
 }
 
+export interface TriggerAllSourcesResponse {
+  success: boolean;
+  message: string;
+  triggered_sources: string[];
+  count: number;
+}
+
+export async function triggerAllSources(): Promise<TriggerAllSourcesResponse> {
+  const response = await fetch(`${API_BASE_URL}/workflow/sources/trigger-all`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || `Failed to trigger sources: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
