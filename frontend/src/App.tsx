@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Portfolio, Investment, NetWorth, Platform } from './types';
+import { Portfolio, Investment, NetWorth, Platform, WorkflowExecution } from './types';
 import { fetchPortfolios, fetchInvestments, fetchNetWorth } from './api';
 import NetWorthCard from './components/NetWorthCard';
 import PortfolioList from './components/PortfolioList';
 import InvestmentChart from './components/InvestmentChart';
 import PlatformCard from './components/PlatformCard';
 import SyncButton from './components/SyncButton';
+import WorkflowTrigger from './components/WorkflowTrigger';
 
 function App() {
   const [networth, setNetworth] = useState<NetWorth | null>(null);
@@ -68,6 +69,10 @@ function App() {
               <p className="mt-2 text-gray-600">Investment Tracking Dashboard</p>
             </div>
             <div className="flex items-center gap-4">
+              <WorkflowTrigger onExecutionComplete={(execution) => {
+                console.log('Workflow execution started:', execution);
+                // Optionally reload data or show notification
+              }} />
               <SyncButton onSyncComplete={handleSyncComplete} />
             </div>
           </div>

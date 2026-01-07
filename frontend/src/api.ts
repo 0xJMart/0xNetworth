@@ -8,6 +8,8 @@ import {
   Portfolio,
   PortfoliosResponse,
   PlatformPortfoliosResponse,
+  WorkflowExecution,
+  ExecuteWorkflowRequest,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -20,15 +22,42 @@ async function fetchAPI<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
-async function postAPI<T>(endpoint: string): Promise<T> {
+async function postAPI<T>(endpoint: string, body?: any): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
-    throw new Error(`Failed to post ${endpoint}: ${response.statusText}`);
+    const contentType = response.headers.get('content-type');
+    let errorMessage = `Failed to post ${endpoint}: ${response.statusText}`;
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        const errorJson = await response.json();
+        // Try to extract a meaningful error message
+        if (errorJson.error) {
+          errorMessage = errorJson.error;
+        } else if (errorJson.detail) {
+          errorMessage = errorJson.detail;
+        } else if (errorJson.message) {
+          errorMessage = errorJson.message;
+        } else {
+          errorMessage = `${errorMessage} - ${JSON.stringify(errorJson)}`;
+        }
+      } else {
+        const errorText = await response.text();
+        if (errorText) {
+          errorMessage = `${errorMessage} - ${errorText}`;
+        }
+      }
+    } catch {
+      // If parsing fails, use the default error message
+    }
+    
+    throw new Error(errorMessage);
   }
   return response.json();
 }
@@ -80,5 +109,46 @@ export async function syncAll(): Promise<{ message: string; last_sync: string }>
 
 export async function syncPlatform(platform: Platform): Promise<{ message: string; platform: string }> {
   return postAPI(`/sync/${platform}`);
+}
+
+// Workflow API
+/**
+ * Converts a YouTube video ID or URL to a full YouTube URL
+ * @param input - Video ID (11 chars) or YouTube URL
+ * @returns Full YouTube URL
+ */
+function normalizeYouTubeInput(input: string): string {
+  const trimmed = input.trim();
+  
+  // Check if it's already a URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  
+  // Check if it's a video ID (11 alphanumeric characters, may include - and _)
+  const videoIdPattern = /^[a-zA-Z0-9_-]{11}$/;
+  if (videoIdPattern.test(trimmed)) {
+    return `https://www.youtube.com/watch?v=${trimmed}`;
+  }
+  
+  // If it doesn't match either pattern, return as-is (backend will validate)
+  return trimmed;
+}
+
+export async function executeWorkflow(videoIdOrUrl: string, sourceId?: string): Promise<WorkflowExecution> {
+  const youtubeUrl = normalizeYouTubeInput(videoIdOrUrl);
+  const request: ExecuteWorkflowRequest = {
+    youtube_url: youtubeUrl,
+    source_id: sourceId,
+  };
+  return postAPI<WorkflowExecution>('/workflow/execute', request);
+}
+
+export async function getWorkflowExecution(id: string): Promise<WorkflowExecution> {
+  return fetchAPI<WorkflowExecution>(`/workflow/executions/${id}`);
+}
+
+export async function getWorkflowExecutions(): Promise<WorkflowExecution[]> {
+  return fetchAPI<WorkflowExecution[]>('/workflow/executions');
 }
 
