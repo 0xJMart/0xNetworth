@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { getWorkflowExecutions, getWorkflowExecutionDetails, WorkflowExecution, WorkflowExecutionDetails } from '../api';
+import { getWorkflowExecutions, getWorkflowExecutionDetails } from '../api';
+import { WorkflowExecution, WorkflowExecutionDetails } from '../types';
 import ExecutionCard from '../components/ExecutionCard';
 import ExecutionDetailsModal from '../components/ExecutionDetailsModal';
 import { parseDate } from '../utils/date';
@@ -14,7 +15,6 @@ export default function WorkflowReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedExecution, setSelectedExecution] = useState<WorkflowExecution | null>(null);
   const [executionDetails, setExecutionDetails] = useState<WorkflowExecutionDetails | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [sortBy, setSortBy] = useState<SortBy>('date-desc');
@@ -38,15 +38,12 @@ export default function WorkflowReviewPage() {
 
   const handleExecutionClick = async (execution: WorkflowExecution) => {
     setSelectedExecution(execution);
-    setDetailsLoading(true);
     try {
       const details = await getWorkflowExecutionDetails(execution.id);
       setExecutionDetails(details);
     } catch (err) {
       console.error('Failed to load execution details:', err);
       setExecutionDetails(null);
-    } finally {
-      setDetailsLoading(false);
     }
   };
 
