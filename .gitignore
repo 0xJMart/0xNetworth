@@ -49,3 +49,16 @@ temp/
 *.tmp
 
 backend/server
+backend/main
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv

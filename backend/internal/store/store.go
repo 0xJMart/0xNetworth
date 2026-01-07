@@ -9,19 +9,29 @@ import (
 
 // Store is an in-memory store for investment data
 type Store struct {
-	mu          sync.RWMutex
-	portfolios  map[string]*models.Portfolio
-	investments map[string]*models.Investment
-	networth    *models.NetWorth
-	lastSync    time.Time
+	mu              sync.RWMutex
+	portfolios      map[string]*models.Portfolio
+	investments     map[string]*models.Investment
+	networth        *models.NetWorth
+	lastSync        time.Time
+	youtubeSources  map[string]*models.YouTubeSource
+	transcripts     map[string]*models.VideoTranscript
+	marketAnalyses  map[string]*models.MarketAnalysis
+	recommendations map[string]*models.Recommendation
+	executions      map[string]*models.WorkflowExecution
 }
 
 // NewStore creates a new in-memory store
 func NewStore() *Store {
 	return &Store{
-		portfolios:  make(map[string]*models.Portfolio),
-		investments: make(map[string]*models.Investment),
-		networth:    &models.NetWorth{},
+		portfolios:      make(map[string]*models.Portfolio),
+		investments:     make(map[string]*models.Investment),
+		networth:        &models.NetWorth{},
+		youtubeSources:  make(map[string]*models.YouTubeSource),
+		transcripts:     make(map[string]*models.VideoTranscript),
+		marketAnalyses:  make(map[string]*models.MarketAnalysis),
+		recommendations: make(map[string]*models.Recommendation),
+		executions:      make(map[string]*models.WorkflowExecution),
 	}
 }
 
@@ -203,5 +213,192 @@ func (s *Store) SetLastSyncTime(t time.Time) {
 	defer s.mu.Unlock()
 
 	s.lastSync = t
+}
+
+// YouTube Source operations
+
+// GetAllYouTubeSources returns all YouTube sources
+func (s *Store) GetAllYouTubeSources() []*models.YouTubeSource {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sources := make([]*models.YouTubeSource, 0, len(s.youtubeSources))
+	for _, src := range s.youtubeSources {
+		sources = append(sources, src)
+	}
+	return sources
+}
+
+// GetYouTubeSourceByID returns a YouTube source by ID
+func (s *Store) GetYouTubeSourceByID(id string) (*models.YouTubeSource, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	source, exists := s.youtubeSources[id]
+	return source, exists
+}
+
+// CreateOrUpdateYouTubeSource creates or updates a YouTube source
+func (s *Store) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.youtubeSources[source.ID] = source
+}
+
+// DeleteYouTubeSource deletes a YouTube source by ID
+func (s *Store) DeleteYouTubeSource(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.youtubeSources[id]; !exists {
+		return false
+	}
+	delete(s.youtubeSources, id)
+	return true
+}
+
+// Video Transcript operations
+
+// CreateOrUpdateTranscript creates or updates a video transcript
+func (s *Store) CreateOrUpdateTranscript(transcript *models.VideoTranscript) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.transcripts[transcript.ID] = transcript
+}
+
+// GetTranscriptByID returns a transcript by ID
+func (s *Store) GetTranscriptByID(id string) (*models.VideoTranscript, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	transcript, exists := s.transcripts[id]
+	return transcript, exists
+}
+
+// GetTranscriptsByVideoID returns transcripts for a specific video ID
+func (s *Store) GetTranscriptsByVideoID(videoID string) []*models.VideoTranscript {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	transcripts := make([]*models.VideoTranscript, 0)
+	for _, t := range s.transcripts {
+		if t.VideoID == videoID {
+			transcripts = append(transcripts, t)
+		}
+	}
+	return transcripts
+}
+
+// Market Analysis operations
+
+// CreateOrUpdateMarketAnalysis creates or updates a market analysis
+func (s *Store) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnalysis) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.marketAnalyses[analysis.ID] = analysis
+}
+
+// GetMarketAnalysisByID returns a market analysis by ID
+func (s *Store) GetMarketAnalysisByID(id string) (*models.MarketAnalysis, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	analysis, exists := s.marketAnalyses[id]
+	return analysis, exists
+}
+
+// GetMarketAnalysesByTranscriptID returns market analyses for a specific transcript ID
+func (s *Store) GetMarketAnalysesByTranscriptID(transcriptID string) []*models.MarketAnalysis {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	analyses := make([]*models.MarketAnalysis, 0)
+	for _, a := range s.marketAnalyses {
+		if a.TranscriptID == transcriptID {
+			analyses = append(analyses, a)
+		}
+	}
+	return analyses
+}
+
+// Recommendation operations
+
+// CreateOrUpdateRecommendation creates or updates a recommendation
+func (s *Store) CreateOrUpdateRecommendation(recommendation *models.Recommendation) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.recommendations[recommendation.ID] = recommendation
+}
+
+// GetRecommendationByID returns a recommendation by ID
+func (s *Store) GetRecommendationByID(id string) (*models.Recommendation, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	recommendation, exists := s.recommendations[id]
+	return recommendation, exists
+}
+
+// GetRecommendationsByAnalysisID returns recommendations for a specific analysis ID
+func (s *Store) GetRecommendationsByAnalysisID(analysisID string) []*models.Recommendation {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	recommendations := make([]*models.Recommendation, 0)
+	for _, r := range s.recommendations {
+		if r.AnalysisID == analysisID {
+			recommendations = append(recommendations, r)
+		}
+	}
+	return recommendations
+}
+
+// Workflow Execution operations
+
+// CreateOrUpdateWorkflowExecution creates or updates a workflow execution
+func (s *Store) CreateOrUpdateWorkflowExecution(execution *models.WorkflowExecution) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.executions[execution.ID] = execution
+}
+
+// GetWorkflowExecutionByID returns a workflow execution by ID
+func (s *Store) GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	execution, exists := s.executions[id]
+	return execution, exists
+}
+
+// GetAllWorkflowExecutions returns all workflow executions
+func (s *Store) GetAllWorkflowExecutions() []*models.WorkflowExecution {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	executions := make([]*models.WorkflowExecution, 0, len(s.executions))
+	for _, e := range s.executions {
+		executions = append(executions, e)
+	}
+	return executions
+}
+
+// GetWorkflowExecutionsBySourceID returns workflow executions for a specific source ID
+func (s *Store) GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	executions := make([]*models.WorkflowExecution, 0)
+	for _, e := range s.executions {
+		if e.SourceID == sourceID {
+			executions = append(executions, e)
+		}
+	}
+	return executions
 }
 

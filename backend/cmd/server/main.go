@@ -7,7 +7,9 @@ import (
 
 	"0xnetworth/backend/internal/handlers"
 	"0xnetworth/backend/internal/integrations/coinbase"
+	workflowclient "0xnetworth/backend/internal/integrations/workflow"
 	"0xnetworth/backend/internal/store"
+	"0xnetworth/backend/internal/workflow"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -43,11 +45,23 @@ func main() {
 		log.Println("Warning: Coinbase API keys not configured. Sync functionality will be limited.")
 	}
 
+	// Initialize workflow service client
+	workflowServiceURL := os.Getenv("WORKFLOW_SERVICE_URL")
+	if workflowServiceURL == "" {
+		workflowServiceURL = "http://localhost:8000"
+	}
+	workflowClient := workflowclient.NewClient(workflowServiceURL)
+
+	// Initialize workflow engine and scheduler
+	workflowEngine := workflow.NewEngine(store, workflowClient)
+	workflowScheduler := workflow.NewScheduler(store, workflowEngine)
+
 	// Initialize handlers
 	portfoliosHandler := handlers.NewPortfoliosHandler(store)
 	investmentsHandler := handlers.NewInvestmentsHandler(store)
 	networthHandler := handlers.NewNetWorthHandler(store)
 	syncHandler := handlers.NewSyncHandler(store, coinbaseClient)
+	workflowHandler := handlers.NewWorkflowHandler(store, workflowEngine, workflowScheduler)
 
 	// Setup router
 	router := gin.Default()
@@ -115,7 +129,25 @@ func main() {
 		// Sync routes
 		api.POST("/sync", syncHandler.SyncAll)
 		api.POST("/sync/:platform", syncHandler.SyncPlatform)
+
+		// Workflow routes
+		api.POST("/workflow/execute", workflowHandler.ExecuteWorkflow)
+		api.GET("/workflow/executions", workflowHandler.GetWorkflowExecutions)
+		api.GET("/workflow/executions/:id", workflowHandler.GetWorkflowExecution)
+		api.GET("/workflow/executions/:id/details", workflowHandler.GetWorkflowExecutionDetails)
+		api.GET("/workflow/transcripts/:id", workflowHandler.GetTranscript)
+		api.GET("/workflow/analyses/:id", workflowHandler.GetMarketAnalysis)
+		api.GET("/workflow/recommendations/:id", workflowHandler.GetRecommendation)
+		api.POST("/workflow/sources", workflowHandler.CreateYouTubeSource)
+		api.GET("/workflow/sources", workflowHandler.GetYouTubeSources)
+		api.GET("/workflow/sources/:id", workflowHandler.GetYouTubeSource)
+		api.DELETE("/workflow/sources/:id", workflowHandler.DeleteYouTubeSource)
+		api.POST("/workflow/sources/:id/schedule", workflowHandler.UpdateSourceSchedule)
 	}
+
+	// Start workflow scheduler
+	workflowScheduler.Start()
+	defer workflowScheduler.Stop()
 
 	// Get port from environment or default to 8080
 	port := os.Getenv("PORT")

@@ -111,6 +111,36 @@ app.kubernetes.io/component: frontend
 {{- end }}
 
 {{/*
+Workflow service fullname
+*/}}
+{{- define "0xnetworth.workflow.fullname" -}}
+{{- printf "%s-workflow" (include "0xnetworth.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Workflow service name
+*/}}
+{{- define "0xnetworth.workflow.serviceName" -}}
+{{- printf "%s-workflow" (include "0xnetworth.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Workflow service labels
+*/}}
+{{- define "0xnetworth.workflow.labels" -}}
+{{ include "0xnetworth.labels" . }}
+app.kubernetes.io/component: workflow
+{{- end }}
+
+{{/*
+Workflow service selector labels
+*/}}
+{{- define "0xnetworth.workflow.selectorLabels" -}}
+{{ include "0xnetworth.selectorLabels" . }}
+app.kubernetes.io/component: workflow
+{{- end }}
+
+{{/*
 Namespace
 */}}
 {{- define "0xnetworth.namespace" -}}
