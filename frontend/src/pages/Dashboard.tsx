@@ -5,6 +5,7 @@ import NetWorthCard from '../components/NetWorthCard';
 import PortfolioList from '../components/PortfolioList';
 import InvestmentChart from '../components/InvestmentChart';
 import PlatformCard from '../components/PlatformCard';
+import RecommendationsCard from '../components/RecommendationsCard';
 
 export default function Dashboard() {
   const [networth, setNetworth] = useState<NetWorth | null>(null);
@@ -103,6 +104,11 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Recommendations Summary Card */}
+          <div className="mb-6">
+            <RecommendationsCard />
           </div>
 
           {/* Net Worth Card */}
