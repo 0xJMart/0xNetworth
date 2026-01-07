@@ -58,6 +58,12 @@ spec:
                   name: {{ .Values.secret.name }}
                   key: COINBASE_API_PRIVATE_KEY
                   optional: true
+            - name: YOUTUBE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: YOUTUBE_API_KEY
+                  optional: true
             {{- end }}
             {{- with .Values.backend.env }}
             {{- toYaml . | nindent 12 }}
