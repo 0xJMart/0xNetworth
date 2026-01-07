@@ -186,9 +186,13 @@ func (c *Client) GetChannelVideos(channelID string, maxResults int, publishedAft
 // ExtractChannelID extracts channel ID from various YouTube URL formats
 // Supports:
 // - https://www.youtube.com/channel/UC... (standard channel ID format)
-// Note: Custom URLs (@username, /c/ChannelName) require API calls to resolve
-// and are not supported in this basic implementation
-func ExtractChannelID(channelURL string) (string, error) {
+// - https://www.youtube.com/@username (custom handle format)
+// - https://www.youtube.com/c/ChannelName (custom URL format)
+func (c *Client) ExtractChannelID(channelURL string) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("YouTube client not initialized (API key not set)")
+	}
+
 	// Handle standard channel URL: youtube.com/channel/UC...
 	if strings.Contains(channelURL, "/channel/") {
 		parts := strings.Split(channelURL, "/channel/")
@@ -202,8 +206,116 @@ func ExtractChannelID(channelURL string) (string, error) {
 		}
 	}
 	
-	// For custom URLs (@username, /c/ChannelName), we'd need to use the YouTube API
-	// to resolve them to channel IDs. This requires additional API calls.
-	return "", fmt.Errorf("unable to extract channel ID from URL: %s (only standard /channel/UC... format is supported)", channelURL)
+	// Handle @username format: youtube.com/@username
+	if strings.Contains(channelURL, "/@") {
+		parts := strings.Split(channelURL, "/@")
+		if len(parts) > 1 {
+			handle := strings.Split(parts[1], "/")[0]
+			handle = strings.Split(handle, "?")[0]
+			if handle != "" {
+				// Use YouTube API to resolve handle to channel ID
+				return c.resolveHandleToChannelID(handle)
+			}
+		}
+	}
+	
+	// Handle /c/ChannelName format: youtube.com/c/ChannelName
+	if strings.Contains(channelURL, "/c/") {
+		parts := strings.Split(channelURL, "/c/")
+		if len(parts) > 1 {
+			username := strings.Split(parts[1], "/")[0]
+			username = strings.Split(username, "?")[0]
+			if username != "" {
+				// Use YouTube API to resolve username to channel ID
+				return c.resolveUsernameToChannelID(username)
+			}
+		}
+	}
+	
+	return "", fmt.Errorf("unable to extract channel ID from URL: %s (unsupported format)", channelURL)
+}
+
+// resolveHandleToChannelID resolves a YouTube handle (@username) to a channel ID
+func (c *Client) resolveHandleToChannelID(handle string) (string, error) {
+	reqURL := fmt.Sprintf("%s/channels", c.baseURL)
+	params := url.Values{}
+	params.Set("key", c.apiKey)
+	params.Set("part", "id")
+	params.Set("forHandle", handle)
+	
+	reqURL += "?" + params.Encode()
+	
+	resp, err := c.httpClient.Get(reqURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve handle: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to resolve handle: %s", string(bodyBytes))
+	}
+	
+	var channelResp struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	
+	if err := json.Unmarshal(bodyBytes, &channelResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	if len(channelResp.Items) == 0 {
+		return "", fmt.Errorf("channel not found for handle: %s", handle)
+	}
+	
+	return channelResp.Items[0].ID, nil
+}
+
+// resolveUsernameToChannelID resolves a YouTube username (/c/ChannelName) to a channel ID
+func (c *Client) resolveUsernameToChannelID(username string) (string, error) {
+	reqURL := fmt.Sprintf("%s/channels", c.baseURL)
+	params := url.Values{}
+	params.Set("key", c.apiKey)
+	params.Set("part", "id")
+	params.Set("forUsername", username)
+	
+	reqURL += "?" + params.Encode()
+	
+	resp, err := c.httpClient.Get(reqURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve username: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to resolve username: %s", string(bodyBytes))
+	}
+	
+	var channelResp struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	
+	if err := json.Unmarshal(bodyBytes, &channelResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	if len(channelResp.Items) == 0 {
+		return "", fmt.Errorf("channel not found for username: %s", username)
+	}
+	
+	return channelResp.Items[0].ID, nil
 }
 

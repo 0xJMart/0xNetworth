@@ -143,8 +143,19 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 		return
 	}
 	
-	// Extract channel ID from URL
-	channelID := s.extractChannelIDFromURL(sourceURL)
+	// Extract channel ID from URL using YouTube client
+	var channelID string
+	var err error
+	if s.youtubeClient != nil {
+		channelID, err = s.youtubeClient.ExtractChannelID(sourceURL)
+		if err != nil {
+			log.Printf("Could not extract channel ID from URL %s: %v", sourceURL, err)
+		}
+	} else {
+		// Fallback to simple extraction if client not available
+		channelID = s.extractChannelIDFromURL(sourceURL)
+	}
+	
 	if channelID == "" {
 		// If we can't extract channel ID, try to use the stored channel_id
 		if source.ChannelID != "" {
@@ -162,6 +173,13 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 			}
 			return
 		}
+	}
+	
+	// Store the resolved channel ID for future use
+	if source.ChannelID != channelID {
+		source.ChannelID = channelID
+		s.store.CreateOrUpdateYouTubeSource(source)
+		log.Printf("Resolved channel ID for source %s: %s", sourceID, channelID)
 	}
 	
 	// Determine publishedAfter time from last processed timestamp
