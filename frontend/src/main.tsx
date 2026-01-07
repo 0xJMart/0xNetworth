@@ -5,6 +5,7 @@ import './index.css'
 import Layout from './components/Layout.tsx'
 import Dashboard from './pages/Dashboard.tsx'
 import WorkflowReviewPage from './pages/WorkflowReviewPage.tsx'
+import YouTubeSourcesPage from './pages/YouTubeSourcesPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="workflows" element={<WorkflowReviewPage />} />
+          <Route path="sources" element={<YouTubeSourcesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

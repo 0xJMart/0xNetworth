@@ -142,6 +142,7 @@ func main() {
 		api.POST("/workflow/sources", workflowHandler.CreateYouTubeSource)
 		api.GET("/workflow/sources", workflowHandler.GetYouTubeSources)
 		api.GET("/workflow/sources/:id", workflowHandler.GetYouTubeSource)
+		api.PUT("/workflow/sources/:id", workflowHandler.UpdateYouTubeSource)
 		api.DELETE("/workflow/sources/:id", workflowHandler.DeleteYouTubeSource)
 		api.POST("/workflow/sources/:id/schedule", workflowHandler.UpdateSourceSchedule)
 	}

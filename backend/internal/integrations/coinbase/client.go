@@ -229,6 +229,10 @@ func (c *Client) makeRequest(method, path string, body io.Reader) (*http.Respons
 }
 
 // GetPortfolios fetches portfolios from Coinbase
+// IMPORTANT: This endpoint only returns portfolios that the API key has access to.
+// If your API key is scoped to a specific portfolio, only that portfolio will be returned.
+// To see all portfolios, ensure your API key has "Portfolio primary view access" 
+// or is not scoped to a specific portfolio in Coinbase Developer Platform.
 func (c *Client) GetPortfolios() ([]coinbasePortfolio, error) {
 	resp, err := c.makeRequest("GET", "/brokerage/portfolios", nil)
 	if err != nil {
@@ -244,9 +248,34 @@ func (c *Client) GetPortfolios() ([]coinbasePortfolio, error) {
 		}
 	}
 
+	// Read the full response body for logging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	
+	// Log the raw response for debugging
+	log.Printf("GetPortfolios: Raw API response: %s", string(bodyBytes))
+
 	var apiResp coinbasePortfoliosResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Log what we found
+	log.Printf("GetPortfolios: Found %d portfolios in 'Portfolios' field, %d in 'Data' field", 
+		len(apiResp.Portfolios), len(apiResp.Data))
+	
+	// Log portfolio details
+	if len(apiResp.Portfolios) > 0 {
+		for i, p := range apiResp.Portfolios {
+			log.Printf("GetPortfolios: Portfolio[%d]: UUID=%s, Name=%s, Type=%s", i, p.UUID, p.Name, p.Type)
+		}
+	}
+	if len(apiResp.Data) > 0 {
+		for i, p := range apiResp.Data {
+			log.Printf("GetPortfolios: Data[%d]: UUID=%s, Name=%s, Type=%s", i, p.UUID, p.Name, p.Type)
+		}
 	}
 
 	// Handle different response formats

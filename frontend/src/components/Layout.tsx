@@ -49,6 +49,16 @@ export default function Layout({ onSyncComplete }: LayoutProps) {
             >
               Workflows
             </Link>
+            <Link
+              to="/sources"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/sources')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              YouTube Sources
+            </Link>
           </nav>
         </div>
       </header>

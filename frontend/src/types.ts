@@ -123,3 +123,31 @@ export interface WorkflowExecutionDetails {
   recommendation?: Recommendation;
 }
 
+// YouTube Source types
+export type YouTubeSourceType = 'channel' | 'playlist';
+
+export interface YouTubeSource {
+  id: string;
+  type: YouTubeSourceType;
+  url: string;
+  name: string;
+  channel_id?: string;
+  playlist_id?: string;
+  enabled: boolean;
+  schedule?: string; // Cron expression
+  last_processed?: string; // ISO 8601 timestamp
+  created_at?: string; // ISO 8601 timestamp
+}
+
+export interface CreateYouTubeSourceRequest {
+  type: YouTubeSourceType;
+  url: string;
+  name: string;
+  enabled?: boolean;
+  schedule?: string;
+}
+
+export interface UpdateSourceScheduleRequest {
+  schedule: string;
+}
+

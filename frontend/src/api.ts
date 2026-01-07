@@ -11,6 +11,9 @@ import {
   WorkflowExecution,
   ExecuteWorkflowRequest,
   WorkflowExecutionDetails,
+  YouTubeSource,
+  CreateYouTubeSourceRequest,
+  UpdateSourceScheduleRequest,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -178,5 +181,48 @@ export interface RecommendationSummaryItem {
 
 export async function getRecommendationsSummary(days: number = 7): Promise<RecommendationsSummary> {
   return fetchAPI<RecommendationsSummary>(`/workflow/recommendations/summary?days=${days}`);
+}
+
+// YouTube Source Management API
+
+export async function getYouTubeSources(): Promise<YouTubeSource[]> {
+  return fetchAPI<YouTubeSource[]>('/workflow/sources');
+}
+
+export async function getYouTubeSource(id: string): Promise<YouTubeSource> {
+  return fetchAPI<YouTubeSource>(`/workflow/sources/${id}`);
+}
+
+export async function createYouTubeSource(source: CreateYouTubeSourceRequest): Promise<YouTubeSource> {
+  return postAPI<YouTubeSource>('/workflow/sources', source);
+}
+
+export async function updateYouTubeSource(id: string, source: CreateYouTubeSourceRequest): Promise<YouTubeSource> {
+  const response = await fetch(`${API_BASE_URL}/workflow/sources/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(source),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || `Failed to update source: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function deleteYouTubeSource(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/workflow/sources/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete source: ${response.statusText}`);
+  }
+}
+
+export async function updateSourceSchedule(id: string, schedule: string): Promise<YouTubeSource> {
+  const request: UpdateSourceScheduleRequest = { schedule };
+  return postAPI<YouTubeSource>(`/workflow/sources/${id}/schedule`, request);
 }
 

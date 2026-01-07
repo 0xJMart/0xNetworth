@@ -170,6 +170,35 @@ func (h *WorkflowHandler) UpdateSourceSchedule(c *gin.Context) {
 	c.JSON(http.StatusOK, source)
 }
 
+// UpdateYouTubeSource handles PUT /api/workflow/sources/:id
+func (h *WorkflowHandler) UpdateYouTubeSource(c *gin.Context) {
+	id := c.Param("id")
+	
+	source, exists := h.store.GetYouTubeSourceByID(id)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source not found"})
+		return
+	}
+
+	var req CreateYouTubeSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Update source fields
+	source.Type = req.Type
+	source.URL = req.URL
+	source.Name = req.Name
+	source.Enabled = req.Enabled
+	if req.Schedule != "" {
+		source.Schedule = req.Schedule
+	}
+
+	h.store.CreateOrUpdateYouTubeSource(source)
+	c.JSON(http.StatusOK, source)
+}
+
 // GetTranscript handles GET /api/workflow/transcripts/:id
 func (h *WorkflowHandler) GetTranscript(c *gin.Context) {
 	id := c.Param("id")
