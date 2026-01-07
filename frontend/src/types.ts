@@ -55,3 +55,27 @@ export interface PlatformPortfoliosResponse {
   portfolios: Portfolio[];
 }
 
+// Workflow Types
+export type WorkflowExecutionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface WorkflowExecution {
+  id: string;
+  status: WorkflowExecutionStatus;
+  video_id: string;
+  video_url: string;
+  video_title?: string;
+  source_id?: string;
+  transcript_id?: string;
+  analysis_id?: string;
+  recommendation_id?: string;
+  error?: string;
+  created_at?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface ExecuteWorkflowRequest {
+  youtube_url: string;
+  source_id?: string;
+}
+
