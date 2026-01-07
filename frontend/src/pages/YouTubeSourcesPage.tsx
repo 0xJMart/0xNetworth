@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getYouTubeSources, createYouTubeSource, updateYouTubeSource, deleteYouTubeSource, updateSourceSchedule, YouTubeSource, CreateYouTubeSourceRequest } from '../api';
+import { getYouTubeSources, createYouTubeSource, updateYouTubeSource, deleteYouTubeSource, updateSourceSchedule } from '../api';
+import { YouTubeSource, CreateYouTubeSourceRequest } from '../types';
 import SourceCard from '../components/SourceCard';
 import SourceModal from '../components/SourceModal';
 

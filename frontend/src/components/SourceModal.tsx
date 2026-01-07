@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CreateYouTubeSourceRequest, YouTubeSource } from '../api';
+import { CreateYouTubeSourceRequest, YouTubeSource } from '../types';
 
 interface SourceModalProps {
   isOpen: boolean;
