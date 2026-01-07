@@ -10,6 +10,7 @@ import {
   PlatformPortfoliosResponse,
   WorkflowExecution,
   ExecuteWorkflowRequest,
+  WorkflowExecutionDetails,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -150,5 +151,9 @@ export async function getWorkflowExecution(id: string): Promise<WorkflowExecutio
 
 export async function getWorkflowExecutions(): Promise<WorkflowExecution[]> {
   return fetchAPI<WorkflowExecution[]>('/workflow/executions');
+}
+
+export async function getWorkflowExecutionDetails(id: string): Promise<WorkflowExecutionDetails> {
+  return fetchAPI<WorkflowExecutionDetails>(`/workflow/executions/${id}/details`);
 }
 

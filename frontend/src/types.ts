@@ -79,3 +79,47 @@ export interface ExecuteWorkflowRequest {
   source_id?: string;
 }
 
+export interface VideoTranscript {
+  id: string;
+  video_id: string;
+  video_title: string;
+  video_url: string;
+  text: string;
+  duration?: number;
+  source_id?: string;
+  created_at?: string;
+}
+
+export interface MarketAnalysis {
+  id: string;
+  transcript_id: string;
+  conditions: string;
+  trends: string[];
+  risk_factors: string[];
+  summary: string;
+  created_at?: string;
+}
+
+export interface SuggestedAction {
+  type: string;
+  symbol: string;
+  rationale: string;
+}
+
+export interface Recommendation {
+  id: string;
+  analysis_id: string;
+  action: string;
+  confidence: number;
+  suggested_actions: SuggestedAction[];
+  summary?: string;
+  created_at?: string;
+}
+
+export interface WorkflowExecutionDetails {
+  execution: WorkflowExecution;
+  transcript?: VideoTranscript;
+  market_analysis?: MarketAnalysis;
+  recommendation?: Recommendation;
+}
+
