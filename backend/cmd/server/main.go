@@ -145,6 +145,7 @@ func main() {
 		api.PUT("/workflow/sources/:id", workflowHandler.UpdateYouTubeSource)
 		api.DELETE("/workflow/sources/:id", workflowHandler.DeleteYouTubeSource)
 		api.POST("/workflow/sources/:id/schedule", workflowHandler.UpdateSourceSchedule)
+		api.POST("/workflow/sources/test", workflowHandler.TestYouTubeSource)
 	}
 
 	// Start workflow scheduler

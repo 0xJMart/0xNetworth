@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 
+	"0xnetworth/backend/internal/integrations/youtube"
 	"0xnetworth/backend/internal/models"
 	"0xnetworth/backend/internal/store"
 	"0xnetworth/backend/internal/workflow"
@@ -197,6 +200,56 @@ func (h *WorkflowHandler) UpdateYouTubeSource(c *gin.Context) {
 
 	h.store.CreateOrUpdateYouTubeSource(source)
 	c.JSON(http.StatusOK, source)
+}
+
+// TestYouTubeSourceRequest represents the request body for testing a YouTube source
+type TestYouTubeSourceRequest struct {
+	URL string `json:"url" binding:"required"`
+}
+
+// TestYouTubeSource handles POST /api/workflow/sources/test
+func (h *WorkflowHandler) TestYouTubeSource(c *gin.Context) {
+	var req TestYouTubeSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get YouTube client from scheduler (if available)
+	// We need to access the scheduler's youtubeClient
+	// For now, we'll create a temporary client
+	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
+	if youtubeAPIKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "YouTube API key not configured"})
+		return
+	}
+
+	// Import youtube client
+	youtubeClient := youtube.NewClient(youtubeAPIKey)
+	if youtubeClient == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize YouTube client"})
+		return
+	}
+
+	// Try to extract/resolve channel ID
+	channelID, err := youtubeClient.ExtractChannelID(req.URL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify the channel exists by trying to fetch videos
+	_, err = youtubeClient.GetChannelVideos(channelID, 1, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Channel not found or inaccessible: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"channel_id": channelID,
+		"message": "Channel found and accessible",
+	})
 }
 
 // GetTranscript handles GET /api/workflow/transcripts/:id

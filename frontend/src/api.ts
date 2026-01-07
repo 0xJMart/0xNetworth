@@ -226,3 +226,27 @@ export async function updateSourceSchedule(id: string, schedule: string): Promis
   return postAPI<YouTubeSource>(`/workflow/sources/${id}/schedule`, request);
 }
 
+export interface TestYouTubeSourceResponse {
+  success: boolean;
+  channel_id?: string;
+  message?: string;
+  error?: string;
+}
+
+export async function testYouTubeSource(url: string): Promise<TestYouTubeSourceResponse> {
+  const response = await fetch(`${API_BASE_URL}/workflow/sources/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || `Failed to test source: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
