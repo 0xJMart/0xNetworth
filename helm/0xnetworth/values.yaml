@@ -4,6 +4,9 @@
 # Override the full name to use "networth" instead of "0xnetworth"
 fullnameOverride: "networth"
 
+# Environment (development, staging, production)
+environment: "production"
+
 # Image pull secrets for private container registries
 # Create a secret with: kubectl create secret docker-registry ghcr-secret \
 #   --docker-server=ghcr.io \
@@ -66,6 +69,9 @@ workflow:
   service:
     type: ClusterIP
     port: 8000
+  # CORS allowed origins (comma-separated)
+  # If not set, defaults to "*" in development, empty in production
+  corsOrigins: ""
   resources:
     limits:
       cpu: 1000m

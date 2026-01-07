@@ -34,6 +34,12 @@ spec:
           env:
             - name: PORT
               value: "8000"
+            - name: ENVIRONMENT
+              value: {{ .Values.environment | default "production" | quote }}
+            {{- if .Values.workflow.corsOrigins }}
+            - name: CORS_ORIGINS
+              value: {{ .Values.workflow.corsOrigins | quote }}
+            {{- end }}
             {{- if .Values.secret.name }}
             - name: OPENAI_API_KEY
               valueFrom:

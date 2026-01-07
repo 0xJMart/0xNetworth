@@ -2,14 +2,17 @@
 
 import sys
 import os
-import json
+import logging
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic_ai import Agent
-from openai import AsyncOpenAI
+from pydantic_ai.exceptions import AgentError
+from openai import AsyncOpenAI, APIError
 from models import MarketAnalysis, PortfolioContext
+
+logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 client = AsyncOpenAI()
@@ -36,6 +39,10 @@ async def analyze_market(transcript_text: str, portfolio_context: PortfolioConte
         
     Returns:
         MarketAnalysis with conditions, trends, risk factors, and summary
+        
+    Raises:
+        AgentError: If the AI agent fails to generate valid output
+        APIError: If OpenAI API call fails
     """
     # Build context for the analysis
     context_prompt = 'Analyze the following video transcript for market conditions, trends, and risk factors:\n\n'
@@ -55,8 +62,21 @@ async def analyze_market(transcript_text: str, portfolio_context: PortfolioConte
     context_prompt += '3) Risk factors mentioned, '
     context_prompt += '4) A detailed summary of market conditions.'
     
-    result = await analysis_agent.run(context_prompt)
-    
-    # Fixed: Changed from result.data to result.output (correct attribute name)
-    return result.output
+    try:
+        result = await analysis_agent.run(context_prompt)
+        
+        # Fixed: Changed from result.data to result.output (correct attribute name)
+        if not result.output:
+            raise AgentError("Agent returned empty output")
+        
+        return result.output
+    except AgentError as e:
+        logger.error(f"Agent error during market analysis: {str(e)}", exc_info=True)
+        raise
+    except APIError as e:
+        logger.error(f"OpenAI API error during market analysis: {str(e)}", exc_info=True)
+        raise AgentError(f"OpenAI API error: {str(e)}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error during market analysis: {str(e)}", exc_info=True)
+        raise AgentError(f"Unexpected error: {str(e)}") from e
 
