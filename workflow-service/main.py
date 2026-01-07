@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from pydantic_ai.exceptions import AgentError
+from pydantic_ai.exceptions import AgentRunError
 
 from models import WorkflowRequest, WorkflowResponse
 from agents import extract_transcript, analyze_market, generate_recommendation
@@ -182,8 +182,8 @@ async def youtube_error_handler(request: Request, exc: Exception):
         }
     )
 
-@app.exception_handler(AgentError)
-async def agent_error_handler(request: Request, exc: AgentError):
+@app.exception_handler(AgentRunError)
+async def agent_error_handler(request: Request, exc: AgentRunError):
     """Handle Pydantic AI agent errors."""
     request_id = getattr(request.state, 'request_id', 'unknown')
     logger.error(f"Agent error: {str(exc)}", exc_info=True)
@@ -191,7 +191,7 @@ async def agent_error_handler(request: Request, exc: AgentError):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": f"AI agent error: {str(exc)}",
-            "error_type": "AgentError",
+            "error_type": "AgentRunError",
             "request_id": request_id
         }
     )
@@ -312,7 +312,7 @@ async def process_video(request: Request, workflow_request: WorkflowRequest) -> 
                 portfolio_context=workflow_request.portfolio_context
             )
             logger.info(f"[{request_id}] Market analysis complete: {market_analysis.conditions}")
-        except AgentError as e:
+        except AgentRunError as e:
             logger.error(f"[{request_id}] Agent error during market analysis: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -333,7 +333,7 @@ async def process_video(request: Request, workflow_request: WorkflowRequest) -> 
                 portfolio_context=workflow_request.portfolio_context
             )
             logger.info(f"[{request_id}] Recommendation generated: {recommendation.action} (confidence: {recommendation.confidence})")
-        except AgentError as e:
+        except AgentRunError as e:
             logger.error(f"[{request_id}] Agent error during recommendation generation: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

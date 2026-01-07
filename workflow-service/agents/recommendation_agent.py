@@ -8,7 +8,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import AgentError
+from pydantic_ai.exceptions import AgentRunError
 from openai import AsyncOpenAI, APIError
 from models import Recommendation, MarketAnalysis, PortfolioContext
 
@@ -45,7 +45,7 @@ async def generate_recommendation(
         Recommendation with action type, confidence, and suggested actions
         
     Raises:
-        AgentError: If the AI agent fails to generate valid output
+        AgentRunError: If the AI agent fails to generate valid output
         APIError: If OpenAI API call fails
     """
     # Build context for recommendation
@@ -75,16 +75,16 @@ async def generate_recommendation(
         
         # Fixed: Changed from result.data to result.output (correct attribute name)
         if not result.output:
-            raise AgentError("Agent returned empty output")
+            raise AgentRunError("Agent returned empty output")
         
         return result.output
-    except AgentError as e:
+    except AgentRunError as e:
         logger.error(f"Agent error during recommendation generation: {str(e)}", exc_info=True)
         raise
     except APIError as e:
         logger.error(f"OpenAI API error during recommendation generation: {str(e)}", exc_info=True)
-        raise AgentError(f"OpenAI API error: {str(e)}") from e
+        raise AgentRunError(f"OpenAI API error: {str(e)}") from e
     except Exception as e:
         logger.error(f"Unexpected error during recommendation generation: {str(e)}", exc_info=True)
-        raise AgentError(f"Unexpected error: {str(e)}") from e
+        raise AgentRunError(f"Unexpected error: {str(e)}") from e
 
