@@ -167,7 +167,8 @@ async def value_error_handler(request: Request, exc: ValueError):
         }
     )
 
-@app.exception_handler((TranscriptsDisabled, NoTranscriptFound, VideoUnavailable))
+# Register handlers for each YouTube exception type separately
+# FastAPI doesn't support tuples in exception_handler decorator
 async def youtube_error_handler(request: Request, exc: Exception):
     """Handle YouTube API errors."""
     request_id = getattr(request.state, 'request_id', 'unknown')
@@ -181,6 +182,11 @@ async def youtube_error_handler(request: Request, exc: Exception):
             "request_id": request_id
         }
     )
+
+# Register the same handler for each YouTube exception type
+app.add_exception_handler(TranscriptsDisabled, youtube_error_handler)
+app.add_exception_handler(NoTranscriptFound, youtube_error_handler)
+app.add_exception_handler(VideoUnavailable, youtube_error_handler)
 
 @app.exception_handler(AgentRunError)
 async def agent_error_handler(request: Request, exc: AgentRunError):
