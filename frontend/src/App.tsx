@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Portfolio, Investment, NetWorth, Platform, WorkflowExecution } from './types';
+import { Portfolio, Investment, NetWorth, Platform } from './types';
 import { fetchPortfolios, fetchInvestments, fetchNetWorth } from './api';
 import NetWorthCard from './components/NetWorthCard';
 import PortfolioList from './components/PortfolioList';
