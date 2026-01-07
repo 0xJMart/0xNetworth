@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { YouTubeSource, updateSourceSchedule } from '../api';
+import { YouTubeSource } from '../api';
 import { formatDate } from '../utils/date';
 
 interface SourceCardProps {
