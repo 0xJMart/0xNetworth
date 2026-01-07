@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { getWorkflowExecutions, getWorkflowExecutionDetails, WorkflowExecution, WorkflowExecutionDetails } from '../api';
 import ExecutionCard from '../components/ExecutionCard';
 import ExecutionDetailsModal from '../components/ExecutionDetailsModal';
+import { parseDate } from '../utils/date';
 
 type StatusFilter = 'all' | 'completed' | 'processing' | 'failed';
 type DateFilter = '7' | '30' | 'all';
@@ -72,12 +73,9 @@ export default function WorkflowReviewPage() {
       filtered = filtered.filter((e) => {
         const dateStr = e.completed_at || e.started_at || e.created_at;
         if (!dateStr) return false;
-        try {
-          const date = new Date(dateStr);
-          return date >= cutoffDate;
-        } catch {
-          return false;
-        }
+        const date = parseDate(dateStr);
+        if (!date) return false;
+        return date >= cutoffDate;
       });
     }
 

@@ -1,4 +1,5 @@
 import { WorkflowExecution } from '../types';
+import { formatDate } from '../utils/date';
 
 interface ExecutionCardProps {
   execution: WorkflowExecution;
@@ -16,21 +17,6 @@ export default function ExecutionCard({ execution, onClick }: ExecutionCardProps
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const formatDate = (dateString?: string): string => {
-    if (!dateString) return 'N/A';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateString;
     }
   };
 

@@ -14,7 +14,13 @@ export default function RecommendationsCard() {
       const data = await getRecommendationsSummary(7);
       setSummary(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load recommendations summary');
+      // Provide user-friendly error message
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load recommendations';
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+        setError('Unable to load recommendations. Please check your connection and try again.');
+      } else {
+        setError('Unable to load recommendations. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -71,9 +77,10 @@ export default function RecommendationsCard() {
           <h2 className="text-xl font-semibold text-gray-900">Recommendations Summary</h2>
           <button
             onClick={loadSummary}
-            className="text-sm text-blue-600 hover:text-blue-700"
+            disabled={loading}
+            className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Retry
+            {loading ? 'Loading...' : 'Retry'}
           </button>
         </div>
         <p className="text-sm text-red-600">{error}</p>

@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -173,9 +174,19 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 	}
 	
 	// Fetch videos from channel
+	// Add rate limiting: wait 100ms before API call to avoid quota issues
+	// YouTube API allows 10,000 units/day, each search costs 100 units
+	// This simple delay helps prevent rapid quota consumption
+	time.Sleep(100 * time.Millisecond)
+	
 	videos, err := s.youtubeClient.GetChannelVideos(channelID, 50, publishedAfter)
 	if err != nil {
-		log.Printf("Error fetching videos from channel %s: %v", channelID, err)
+		// Log quota-related errors specifically
+		if apiErr, ok := err.(*youtube.APIError); ok && apiErr.StatusCode == http.StatusForbidden {
+			log.Printf("YouTube API quota exceeded or invalid key for channel %s: %v", channelID, err)
+		} else {
+			log.Printf("Error fetching videos from channel %s: %v", channelID, err)
+		}
 		return
 	}
 	
@@ -190,8 +201,8 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 	
 	log.Printf("Found %d videos from channel %s", len(videos), channelID)
 	
-	// Get already processed video IDs
-	processedVideoIDs := s.getProcessedVideoIDs()
+	// Get already processed video IDs for this source (optimized)
+	processedVideoIDs := s.getProcessedVideoIDs(sourceID)
 	
 	// Process each new video
 	processedCount := 0
@@ -249,9 +260,10 @@ func (s *Scheduler) extractChannelIDFromURL(url string) string {
 	return ""
 }
 
-// getProcessedVideoIDs returns a map of already processed video IDs
-func (s *Scheduler) getProcessedVideoIDs() map[string]bool {
-	executions := s.store.GetAllWorkflowExecutions()
+// getProcessedVideoIDs returns a map of already processed video IDs for a specific source
+// This is optimized to only check executions from the same source
+func (s *Scheduler) getProcessedVideoIDs(sourceID string) map[string]bool {
+	executions := s.store.GetWorkflowExecutionsBySourceID(sourceID)
 	processed := make(map[string]bool)
 	
 	for _, exec := range executions {

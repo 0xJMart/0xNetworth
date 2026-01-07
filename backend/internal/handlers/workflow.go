@@ -15,6 +15,11 @@ import (
 	"0xnetworth/backend/internal/workflow"
 )
 
+const (
+	// RecentRecommendationsLimit is the maximum number of recent recommendations to return
+	RecentRecommendationsLimit = 10
+)
+
 // WorkflowHandler handles workflow-related HTTP requests
 type WorkflowHandler struct {
 	store    *store.Store
@@ -297,6 +302,7 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 		
 		completedAt, err := time.Parse(time.RFC3339, exec.CompletedAt)
 		if err != nil {
+			log.Printf("Warning: Invalid CompletedAt timestamp for execution %s: %v", exec.ID, err)
 			continue
 		}
 		
@@ -310,11 +316,14 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 		TotalCount:          len(recentExecutions),
 		ActionDistribution:  make(map[string]int),
 		ConditionDistribution: make(map[string]int),
-		RecentRecommendations: make([]RecommendationSummaryItem, 0),
+		RecentRecommendations: make([]RecommendationSummaryItem, 0, len(recentExecutions)),
 	}
 	
 	totalConfidence := 0.0
 	validConfidenceCount := 0
+	
+	// Collect all recommendation items first
+	allRecommendationItems := make([]RecommendationSummaryItem, 0, len(recentExecutions))
 	
 	// Process each execution
 	for _, exec := range recentExecutions {
@@ -343,30 +352,35 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 			validConfidenceCount++
 		}
 		
-		// Add to recent recommendations (limit to 10 most recent)
-		if len(summary.RecentRecommendations) < 10 {
-			item := RecommendationSummaryItem{
-				ExecutionID: exec.ID,
-				VideoTitle:   exec.VideoTitle,
-				VideoID:      exec.VideoID,
-				Action:       rec.Action,
-				Confidence:   rec.Confidence,
-				Condition:   condition,
-				CompletedAt:  exec.CompletedAt,
-			}
-			summary.RecentRecommendations = append(summary.RecentRecommendations, item)
+		// Collect all items for sorting
+		item := RecommendationSummaryItem{
+			ExecutionID: exec.ID,
+			VideoTitle:   exec.VideoTitle,
+			VideoID:      exec.VideoID,
+			Action:       rec.Action,
+			Confidence:   rec.Confidence,
+			Condition:   condition,
+			CompletedAt:  exec.CompletedAt,
 		}
+		allRecommendationItems = append(allRecommendationItems, item)
 	}
+	
+	// Sort by completed_at (newest first), then take top N
+	sort.Slice(allRecommendationItems, func(i, j int) bool {
+		return allRecommendationItems[i].CompletedAt > allRecommendationItems[j].CompletedAt
+	})
+	
+	// Take top N most recent
+	limit := RecentRecommendationsLimit
+	if len(allRecommendationItems) < limit {
+		limit = len(allRecommendationItems)
+	}
+	summary.RecentRecommendations = allRecommendationItems[:limit]
 	
 	// Calculate average confidence
 	if validConfidenceCount > 0 {
 		summary.AverageConfidence = totalConfidence / float64(validConfidenceCount)
 	}
-	
-	// Sort recent recommendations by completed_at (newest first)
-	sort.Slice(summary.RecentRecommendations, func(i, j int) bool {
-		return summary.RecentRecommendations[i].CompletedAt > summary.RecentRecommendations[j].CompletedAt
-	})
 	
 	c.JSON(http.StatusOK, summary)
 }

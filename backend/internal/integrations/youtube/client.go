@@ -6,7 +6,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
+)
+
+const (
+	// MaxResultsDefault is the default number of videos to fetch
+	MaxResultsDefault = 50
+	// MaxResultsMax is the maximum number of videos per request
+	MaxResultsMax = 50
+	// MaxErrorMessageSize limits error message size to prevent memory issues
+	MaxErrorMessageSize = 500
 )
 
 // Client handles communication with YouTube Data API v3
@@ -123,9 +133,25 @@ func (c *Client) GetChannelVideos(channelID string, maxResults int, publishedAft
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
+		errorMsg := string(bodyBytes)
+		// Limit error message size
+		if len(errorMsg) > MaxErrorMessageSize {
+			errorMsg = errorMsg[:MaxErrorMessageSize] + "..."
+		}
+		
+		// Provide user-friendly error messages for common cases
+		switch resp.StatusCode {
+		case http.StatusForbidden:
+			errorMsg = "YouTube API quota exceeded or API key invalid"
+		case http.StatusBadRequest:
+			errorMsg = "Invalid YouTube API request: " + errorMsg
+		case http.StatusUnauthorized:
+			errorMsg = "YouTube API key is invalid or missing"
+		}
+		
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
-			Message:    string(bodyBytes),
+			Message:    errorMsg,
 		}
 	}
 
@@ -159,20 +185,25 @@ func (c *Client) GetChannelVideos(channelID string, maxResults int, publishedAft
 
 // ExtractChannelID extracts channel ID from various YouTube URL formats
 // Supports:
-// - https://www.youtube.com/channel/UC...
-// - https://www.youtube.com/c/ChannelName
-// - https://www.youtube.com/@ChannelName
-// - https://youtube.com/user/username
+// - https://www.youtube.com/channel/UC... (standard channel ID format)
+// Note: Custom URLs (@username, /c/ChannelName) require API calls to resolve
+// and are not supported in this basic implementation
 func ExtractChannelID(channelURL string) (string, error) {
-	// For now, we'll require the full channel ID format
-	// In a full implementation, we'd need to use the YouTube API to resolve
-	// custom URLs and usernames to channel IDs
-	// For simplicity, we'll extract from standard channel URL format
+	// Handle standard channel URL: youtube.com/channel/UC...
+	if strings.Contains(channelURL, "/channel/") {
+		parts := strings.Split(channelURL, "/channel/")
+		if len(parts) > 1 {
+			channelID := strings.Split(parts[1], "/")[0]
+			channelID = strings.Split(channelID, "?")[0]
+			// Channel IDs typically start with UC and are 24 characters
+			if strings.HasPrefix(channelID, "UC") && len(channelID) >= 24 {
+				return channelID, nil
+			}
+		}
+	}
 	
-	// Pattern: youtube.com/channel/UC...
-	// This is the most reliable format
-	// TODO: Add support for resolving custom URLs via API
-	
-	return "", fmt.Errorf("channel ID extraction not yet implemented - please use full channel URL with channel ID")
+	// For custom URLs (@username, /c/ChannelName), we'd need to use the YouTube API
+	// to resolve them to channel IDs. This requires additional API calls.
+	return "", fmt.Errorf("unable to extract channel ID from URL: %s (only standard /channel/UC... format is supported)", channelURL)
 }
 

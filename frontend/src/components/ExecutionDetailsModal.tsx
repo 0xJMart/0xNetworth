@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { WorkflowExecutionDetails } from '../types';
 
 interface ExecutionDetailsModalProps {
@@ -7,6 +8,22 @@ interface ExecutionDetailsModalProps {
 }
 
 export default function ExecutionDetailsModal({ details, isOpen, onClose }: ExecutionDetailsModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen || !details) return null;
 
   const formatDuration = (seconds?: number): string => {
