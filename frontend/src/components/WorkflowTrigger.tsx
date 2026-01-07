@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { executeWorkflow, getWorkflowExecution } from '../api';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { executeWorkflow } from '../api';
 import { WorkflowExecution } from '../types';
 
 interface WorkflowTriggerProps {
@@ -12,6 +12,16 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
   const [isExecuting, setIsExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<WorkflowExecution | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const validateInput = (value: string): string | null => {
     const trimmed = value.trim();
@@ -19,10 +29,16 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
       return 'Please enter a YouTube video ID or URL';
     }
 
-    // Check if it's a URL
+    // Check if it's a URL - more permissive to handle query parameters
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      const urlPattern = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/;
-      if (!urlPattern.test(trimmed)) {
+      // Extract video ID from various YouTube URL formats, allowing query parameters
+      const urlPatterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+      ];
+      
+      const hasValidVideoId = urlPatterns.some(pattern => pattern.test(trimmed));
+      if (!hasValidVideoId) {
         return 'Invalid YouTube URL format';
       }
       return null;
@@ -55,12 +71,18 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
       setSuccess(execution);
       onExecutionComplete?.(execution);
       
-      // Auto-close after 3 seconds on success
-      setTimeout(() => {
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Auto-close after 5 seconds on success (increased from 3 to allow copying execution ID)
+      timeoutRef.current = setTimeout(() => {
         setIsOpen(false);
         setInput('');
         setSuccess(null);
-      }, 3000);
+        timeoutRef.current = null;
+      }, 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute workflow');
     } finally {
@@ -68,12 +90,39 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (!isExecuting) {
+      // Clear timeout if closing manually
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
       setIsOpen(false);
       setInput('');
       setError(null);
       setSuccess(null);
+    }
+  }, [isExecuting]);
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isExecuting) {
+        handleClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [isOpen, isExecuting, handleClose]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && !isExecuting) {
+      handleClose();
     }
   };
 
@@ -82,6 +131,7 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
       <button
         onClick={() => setIsOpen(true)}
         className="px-4 py-2 rounded-lg font-medium transition-colors bg-green-600 text-white hover:bg-green-700"
+        aria-label="Open workflow trigger modal to analyze YouTube video"
       >
         <span className="flex items-center gap-2">
           <svg
@@ -108,14 +158,23 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          onClick={handleBackdropClick}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="workflow-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Analyze YouTube Video</h2>
+              <h2 id="workflow-modal-title" className="text-xl font-semibold text-gray-900">
+                Analyze YouTube Video
+              </h2>
               <button
                 onClick={handleClose}
                 disabled={isExecuting}
                 className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                aria-label="Close modal"
               >
                 <svg
                   className="w-6 h-6"
@@ -150,8 +209,11 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
                   disabled={isExecuting}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   autoFocus
+                  aria-describedby="video-input-help"
+                  aria-invalid={error ? 'true' : 'false'}
+                  aria-required="true"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p id="video-input-help" className="mt-1 text-xs text-gray-500">
                   Enter a YouTube video ID (11 characters) or full URL
                 </p>
               </div>
@@ -168,11 +230,18 @@ export default function WorkflowTrigger({ onExecutionComplete }: WorkflowTrigger
                     Workflow execution started successfully!
                   </p>
                   <p className="text-xs text-green-600 mt-1">
-                    Execution ID: {success.id}
+                    Execution ID: <span className="font-mono">{success.id}</span>
                   </p>
                   <p className="text-xs text-green-600">
                     Status: {success.status}
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="mt-2 text-xs text-green-700 underline hover:no-underline"
+                  >
+                    Close
+                  </button>
                 </div>
               )}
 

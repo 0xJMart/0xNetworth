@@ -31,8 +31,33 @@ async function postAPI<T>(endpoint: string, body?: any): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to post ${endpoint}: ${response.statusText} - ${errorText}`);
+    const contentType = response.headers.get('content-type');
+    let errorMessage = `Failed to post ${endpoint}: ${response.statusText}`;
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        const errorJson = await response.json();
+        // Try to extract a meaningful error message
+        if (errorJson.error) {
+          errorMessage = errorJson.error;
+        } else if (errorJson.detail) {
+          errorMessage = errorJson.detail;
+        } else if (errorJson.message) {
+          errorMessage = errorJson.message;
+        } else {
+          errorMessage = `${errorMessage} - ${JSON.stringify(errorJson)}`;
+        }
+      } else {
+        const errorText = await response.text();
+        if (errorText) {
+          errorMessage = `${errorMessage} - ${errorText}`;
+        }
+      }
+    } catch {
+      // If parsing fails, use the default error message
+    }
+    
+    throw new Error(errorMessage);
   }
   return response.json();
 }
