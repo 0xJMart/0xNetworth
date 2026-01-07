@@ -52,6 +52,45 @@ backend:
   # CORS allowed origins (comma-separated)
   # If not set, defaults to localhost for development
   corsAllowedOrigins: ""
+  # Workflow service URL (defaults to service name if not specified)
+  workflowServiceURL: ""
+
+# Workflow service configuration
+workflow:
+  image:
+    repository: ghcr.io/0xjmart/0xnetworth/workflow-service
+    # tag defaults to Chart.AppVersion if not specified (leave empty or omit)
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  env: []
+  # Example:
+  # - name: LOG_LEVEL
+  #   value: "INFO"
 
 # Frontend configuration
 frontend:

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "0xnetworth.workflow.serviceName" . }}
+  namespace: {{ include "0xnetworth.namespace" . }}
+  labels:
+    {{- include "0xnetworth.workflow.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.workflow.service.type }}
+  ports:
+    - port: {{ .Values.workflow.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "0xnetworth.workflow.selectorLabels" . | nindent 4 }}
+

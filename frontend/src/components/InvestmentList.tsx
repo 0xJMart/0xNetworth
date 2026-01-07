@@ -113,3 +113,4 @@ export default function InvestmentList({ investments, onInvestmentClick }: Inves
   );
 }
 
+

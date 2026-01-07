@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "0xnetworth.workflow.fullname" . }}
+  namespace: {{ include "0xnetworth.namespace" . }}
+  labels:
+    {{- include "0xnetworth.workflow.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.workflow.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "0xnetworth.workflow.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "0xnetworth.workflow.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.workflow.podSecurityContext | nindent 8 }}
+      containers:
+        - name: workflow
+          securityContext:
+            {{- toYaml .Values.workflow.securityContext | nindent 12 }}
+          image: "{{ .Values.workflow.image.repository }}:{{ if .Values.workflow.image.tag }}{{ .Values.workflow.image.tag }}{{ else }}{{ .Chart.AppVersion }}{{ end }}"
+          imagePullPolicy: {{ .Values.workflow.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8000"
+            {{- if .Values.secret.name }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: OPENAI_API_KEY
+                  optional: true
+            {{- end }}
+            {{- with .Values.workflow.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.workflow.resources | nindent 12 }}
+
