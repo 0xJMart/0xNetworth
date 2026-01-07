@@ -3,6 +3,8 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -243,6 +245,130 @@ func (h *WorkflowHandler) GetWorkflowExecutionDetails(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// RecommendationsSummary represents aggregated recommendation data
+type RecommendationsSummary struct {
+	TotalCount           int                `json:"total_count"`
+	ActionDistribution   map[string]int     `json:"action_distribution"`
+	AverageConfidence    float64            `json:"average_confidence"`
+	ConditionDistribution map[string]int    `json:"condition_distribution"`
+	RecentRecommendations []RecommendationSummaryItem `json:"recent_recommendations"`
+}
+
+// RecommendationSummaryItem represents a single recommendation in the summary
+type RecommendationSummaryItem struct {
+	ExecutionID   string  `json:"execution_id"`
+	VideoTitle    string  `json:"video_title"`
+	VideoID       string  `json:"video_id"`
+	Action        string  `json:"action"`
+	Confidence    float64 `json:"confidence"`
+	Condition     string  `json:"condition"`
+	CompletedAt   string  `json:"completed_at"`
+}
+
+// GetRecommendationsSummary handles GET /api/workflow/recommendations/summary
+func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
+	// Get days parameter (default 7)
+	daysStr := c.DefaultQuery("days", "7")
+	days := 7
+	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
+		days = d
+	}
+	
+	// Calculate cutoff time
+	cutoffTime := time.Now().UTC().AddDate(0, 0, -days)
+	
+	// Get all executions
+	allExecutions := h.store.GetAllWorkflowExecutions()
+	
+	// Filter executions from the past N days with recommendations
+	recentExecutions := make([]*models.WorkflowExecution, 0)
+	for _, exec := range allExecutions {
+		if exec.Status != models.WorkflowStatusCompleted {
+			continue
+		}
+		if exec.RecommendationID == "" {
+			continue
+		}
+		if exec.CompletedAt == "" {
+			continue
+		}
+		
+		completedAt, err := time.Parse(time.RFC3339, exec.CompletedAt)
+		if err != nil {
+			continue
+		}
+		
+		if completedAt.After(cutoffTime) {
+			recentExecutions = append(recentExecutions, exec)
+		}
+	}
+	
+	// Build summary
+	summary := RecommendationsSummary{
+		TotalCount:          len(recentExecutions),
+		ActionDistribution:  make(map[string]int),
+		ConditionDistribution: make(map[string]int),
+		RecentRecommendations: make([]RecommendationSummaryItem, 0),
+	}
+	
+	totalConfidence := 0.0
+	validConfidenceCount := 0
+	
+	// Process each execution
+	for _, exec := range recentExecutions {
+		// Get recommendation
+		rec, exists := h.store.GetRecommendationByID(exec.RecommendationID)
+		if !exists {
+			continue
+		}
+		
+		// Get market analysis for condition
+		condition := "unknown"
+		if exec.AnalysisID != "" {
+			analysis, exists := h.store.GetMarketAnalysisByID(exec.AnalysisID)
+			if exists {
+				condition = analysis.Conditions
+				summary.ConditionDistribution[condition]++
+			}
+		}
+		
+		// Track action distribution
+		summary.ActionDistribution[rec.Action]++
+		
+		// Track confidence
+		if rec.Confidence > 0 {
+			totalConfidence += rec.Confidence
+			validConfidenceCount++
+		}
+		
+		// Add to recent recommendations (limit to 10 most recent)
+		if len(summary.RecentRecommendations) < 10 {
+			item := RecommendationSummaryItem{
+				ExecutionID: exec.ID,
+				VideoTitle:   exec.VideoTitle,
+				VideoID:      exec.VideoID,
+				Action:       rec.Action,
+				Confidence:   rec.Confidence,
+				Condition:   condition,
+				CompletedAt:  exec.CompletedAt,
+			}
+			summary.RecentRecommendations = append(summary.RecentRecommendations, item)
+		}
+	}
+	
+	// Calculate average confidence
+	if validConfidenceCount > 0 {
+		summary.AverageConfidence = totalConfidence / float64(validConfidenceCount)
+	}
+	
+	// Sort recent recommendations by completed_at (newest first)
+	sort.Slice(summary.RecentRecommendations, func(i, j int) bool {
+		return summary.RecentRecommendations[i].CompletedAt > summary.RecentRecommendations[j].CompletedAt
+	})
+	
+	c.JSON(http.StatusOK, summary)
 }
 
 

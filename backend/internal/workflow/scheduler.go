@@ -1,19 +1,25 @@
 package workflow
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/robfig/cron/v3"
+	"0xnetworth/backend/internal/integrations/youtube"
+	"0xnetworth/backend/internal/models"
 	"0xnetworth/backend/internal/store"
 )
 
 // Scheduler manages scheduled workflow executions
 type Scheduler struct {
-	store   *store.Store
-	engine  *Engine
-	cron    *cron.Cron
-	enabled bool
+	store       *store.Store
+	engine      *Engine
+	cron        *cron.Cron
+	enabled     bool
+	youtubeClient *youtube.Client
 }
 
 // NewScheduler creates a new workflow scheduler
@@ -23,11 +29,22 @@ func NewScheduler(store *store.Store, engine *Engine) *Scheduler {
 		enabled = "true"
 	}
 	
+	// Initialize YouTube client if API key is provided
+	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
+	var youtubeClient *youtube.Client
+	if youtubeAPIKey != "" {
+		youtubeClient = youtube.NewClient(youtubeAPIKey)
+		log.Println("YouTube API client initialized")
+	} else {
+		log.Println("Warning: YOUTUBE_API_KEY not set. Channel polling will be disabled.")
+	}
+	
 	s := &Scheduler{
-		store:   store,
-		engine:  engine,
-		cron:    cron.New(),
-		enabled: enabled == "true",
+		store:        store,
+		engine:       engine,
+		cron:         cron.New(),
+		enabled:      enabled == "true",
+		youtubeClient: youtubeClient,
 	}
 	
 	if s.enabled {
@@ -99,31 +116,151 @@ func (s *Scheduler) setupSchedules() {
 
 // executeSource executes workflow for a YouTube source
 func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
-	// For now, we'll process the source URL directly
-	// In a full implementation, this would:
-	// 1. Fetch videos from the channel/playlist
-	// 2. Check which ones haven't been processed
-	// 3. Process each new video
-	
 	log.Printf("Executing workflow for source %s: %s", sourceID, sourceURL)
 	
-	// Execute workflow for the source URL
-	// Note: This is a simplified implementation
-	// Full implementation would fetch channel/playlist videos first
-	execution, err := s.engine.ExecuteWorkflow(sourceURL, sourceID)
-	if err != nil {
-		log.Printf("Error executing workflow for source %s: %v", sourceID, err)
+	source, exists := s.store.GetYouTubeSourceByID(sourceID)
+	if !exists {
+		log.Printf("Source %s not found", sourceID)
 		return
 	}
 	
+	// If YouTube client is not available or source is not a channel, fall back to direct URL processing
+	if s.youtubeClient == nil || source.Type != models.YouTubeSourceTypeChannel {
+		log.Printf("Processing source URL directly (YouTube client not available or not a channel)")
+		execution, err := s.engine.ExecuteWorkflow(sourceURL, sourceID)
+		if err != nil {
+			log.Printf("Error executing workflow for source %s: %v", sourceID, err)
+			return
+		}
+		
+		if execution.CompletedAt != "" {
+			source.LastProcessed = execution.CompletedAt
+			s.store.CreateOrUpdateYouTubeSource(source)
+		}
+		
+		log.Printf("Workflow execution completed for source %s: %s", sourceID, execution.ID)
+		return
+	}
+	
+	// Extract channel ID from URL
+	channelID := s.extractChannelIDFromURL(sourceURL)
+	if channelID == "" {
+		// If we can't extract channel ID, try to use the stored channel_id
+		if source.ChannelID != "" {
+			channelID = source.ChannelID
+		} else {
+			log.Printf("Could not extract channel ID from URL %s, falling back to direct processing", sourceURL)
+			execution, err := s.engine.ExecuteWorkflow(sourceURL, sourceID)
+			if err != nil {
+				log.Printf("Error executing workflow for source %s: %v", sourceID, err)
+				return
+			}
+			if execution.CompletedAt != "" {
+				source.LastProcessed = execution.CompletedAt
+				s.store.CreateOrUpdateYouTubeSource(source)
+			}
+			return
+		}
+	}
+	
+	// Determine publishedAfter time from last processed timestamp
+	var publishedAfter *time.Time
+	if source.LastProcessed != "" {
+		parsed, err := time.Parse(time.RFC3339, source.LastProcessed)
+		if err == nil {
+			publishedAfter = &parsed
+		}
+	}
+	
+	// Fetch videos from channel
+	videos, err := s.youtubeClient.GetChannelVideos(channelID, 50, publishedAfter)
+	if err != nil {
+		log.Printf("Error fetching videos from channel %s: %v", channelID, err)
+		return
+	}
+	
+	if len(videos) == 0 {
+		log.Printf("No new videos found for channel %s", channelID)
+		// Update last processed time even if no new videos
+		now := time.Now().UTC().Format(time.RFC3339)
+		source.LastProcessed = now
+		s.store.CreateOrUpdateYouTubeSource(source)
+		return
+	}
+	
+	log.Printf("Found %d videos from channel %s", len(videos), channelID)
+	
+	// Get already processed video IDs
+	processedVideoIDs := s.getProcessedVideoIDs()
+	
+	// Process each new video
+	processedCount := 0
+	latestProcessedTime := source.LastProcessed
+	
+	for _, video := range videos {
+		// Skip if already processed
+		if processedVideoIDs[video.ID] {
+			log.Printf("Skipping already processed video: %s (%s)", video.ID, video.Title)
+			continue
+		}
+		
+		// Build YouTube URL for the video
+		videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", video.ID)
+		
+		log.Printf("Processing new video: %s (%s)", video.ID, video.Title)
+		execution, err := s.engine.ExecuteWorkflow(videoURL, sourceID)
+		if err != nil {
+			log.Printf("Error executing workflow for video %s: %v", video.ID, err)
+			continue
+		}
+		
+		processedCount++
+		
+		// Update latest processed time
+		if execution.CompletedAt != "" {
+			latestProcessedTime = execution.CompletedAt
+		} else if execution.StartedAt != "" {
+			latestProcessedTime = execution.StartedAt
+		}
+		
+		log.Printf("Workflow execution completed for video %s: %s", video.ID, execution.ID)
+	}
+	
 	// Update source last processed time
-	source, exists := s.store.GetYouTubeSourceByID(sourceID)
-	if exists {
-		source.LastProcessed = execution.CompletedAt
+	if latestProcessedTime != "" {
+		source.LastProcessed = latestProcessedTime
 		s.store.CreateOrUpdateYouTubeSource(source)
 	}
 	
-	log.Printf("Workflow execution completed for source %s: %s", sourceID, execution.ID)
+	log.Printf("Processed %d new videos from source %s", processedCount, sourceID)
+}
+
+// extractChannelIDFromURL extracts channel ID from YouTube URL
+func (s *Scheduler) extractChannelIDFromURL(url string) string {
+	// Pattern: https://www.youtube.com/channel/UC...
+	if strings.Contains(url, "/channel/") {
+		parts := strings.Split(url, "/channel/")
+		if len(parts) > 1 {
+			channelID := strings.Split(parts[1], "/")[0]
+			channelID = strings.Split(channelID, "?")[0]
+			return channelID
+		}
+	}
+	return ""
+}
+
+// getProcessedVideoIDs returns a map of already processed video IDs
+func (s *Scheduler) getProcessedVideoIDs() map[string]bool {
+	executions := s.store.GetAllWorkflowExecutions()
+	processed := make(map[string]bool)
+	
+	for _, exec := range executions {
+		if exec.VideoID != "" {
+			processed[exec.VideoID] = true
+		}
+	}
+	
+	return processed
 }
 
 // TriggerSourceManually triggers a workflow execution for a source immediately
