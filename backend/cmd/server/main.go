@@ -138,6 +138,7 @@ func main() {
 		api.GET("/workflow/transcripts/:id", workflowHandler.GetTranscript)
 		api.GET("/workflow/analyses/:id", workflowHandler.GetMarketAnalysis)
 		api.GET("/workflow/recommendations/:id", workflowHandler.GetRecommendation)
+		api.GET("/workflow/recommendations/summary", workflowHandler.GetRecommendationsSummary)
 		api.POST("/workflow/sources", workflowHandler.CreateYouTubeSource)
 		api.GET("/workflow/sources", workflowHandler.GetYouTubeSources)
 		api.GET("/workflow/sources/:id", workflowHandler.GetYouTubeSource)

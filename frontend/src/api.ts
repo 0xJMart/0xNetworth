@@ -157,3 +157,26 @@ export async function getWorkflowExecutionDetails(id: string): Promise<WorkflowE
   return fetchAPI<WorkflowExecutionDetails>(`/workflow/executions/${id}/details`);
 }
 
+// Recommendations Summary API
+export interface RecommendationsSummary {
+  total_count: number;
+  action_distribution: Record<string, number>;
+  average_confidence: number;
+  condition_distribution: Record<string, number>;
+  recent_recommendations: RecommendationSummaryItem[];
+}
+
+export interface RecommendationSummaryItem {
+  execution_id: string;
+  video_title: string;
+  video_id: string;
+  action: string;
+  confidence: number;
+  condition: string;
+  completed_at: string;
+}
+
+export async function getRecommendationsSummary(days: number = 7): Promise<RecommendationsSummary> {
+  return fetchAPI<RecommendationsSummary>(`/workflow/recommendations/summary?days=${days}`);
+}
+
