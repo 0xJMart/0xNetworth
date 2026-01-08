@@ -200,6 +200,22 @@ export async function getRecommendationsSummary(days: number = 7): Promise<Recom
   return fetchAPI<RecommendationsSummary>(`/workflow/recommendations/summary?days=${days}`);
 }
 
+export async function generateAggregatedRecommendation(): Promise<AggregatedRecommendation> {
+  const response = await fetch(`${API_BASE_URL}/workflow/recommendations/aggregate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to generate aggregated recommendation');
+  }
+  
+  return response.json();
+}
+
 // YouTube Source Management API
 
 export async function getYouTubeSources(): Promise<YouTubeSource[]> {
