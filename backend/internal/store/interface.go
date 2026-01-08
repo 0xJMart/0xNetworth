@@ -58,5 +58,9 @@ type Store interface {
 	GetAllWorkflowExecutions() []*models.WorkflowExecution
 	GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution
 	GetWorkflowExecutionsByVideoID(videoID string) []*models.WorkflowExecution
+	
+	// Aggregated Recommendation operations
+	GetLatestAggregatedRecommendation() (*models.AggregatedRecommendation, bool)
+	CreateOrUpdateAggregatedRecommendation(rec *models.AggregatedRecommendation) error
 }
 

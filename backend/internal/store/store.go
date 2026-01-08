@@ -417,3 +417,20 @@ func (s *MemoryStore) GetWorkflowExecutionsByVideoID(videoID string) []*models.W
 	return executions
 }
 
+// GetLatestAggregatedRecommendation returns the most recent aggregated recommendation
+func (s *MemoryStore) GetLatestAggregatedRecommendation() (*models.AggregatedRecommendation, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	// Memory store doesn't persist aggregated recommendations
+	// Return false to indicate not found
+	return nil, false
+}
+
+// CreateOrUpdateAggregatedRecommendation creates or updates an aggregated recommendation
+func (s *MemoryStore) CreateOrUpdateAggregatedRecommendation(rec *models.AggregatedRecommendation) error {
+	// Memory store doesn't persist aggregated recommendations
+	// This is a no-op for in-memory store
+	return nil
+}
+

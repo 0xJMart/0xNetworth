@@ -1220,3 +1220,90 @@ func (s *PostgresStore) GetWorkflowExecutionsByVideoID(videoID string) []*models
 	return executions
 }
 
+
+// Aggregated Recommendation operations
+
+// GetLatestAggregatedRecommendation returns the most recent aggregated recommendation
+func (s *PostgresStore) GetLatestAggregatedRecommendation() (*models.AggregatedRecommendation, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
+	
+	var rec models.AggregatedRecommendation
+	var suggestedActionsJSON, keyInsightsJSON, executionIDsJSON []byte
+	var createdAt, updatedAt sql.NullTime
+	
+	err := s.pool.QueryRow(ctx,
+		"SELECT id, action, confidence, suggested_actions, summary, key_insights, execution_ids, created_at, updated_at FROM aggregated_recommendations ORDER BY created_at DESC LIMIT 1",
+	).Scan(&rec.ID, &rec.Action, &rec.Confidence, &suggestedActionsJSON, &rec.Summary, &keyInsightsJSON, &executionIDsJSON, &createdAt, &updatedAt)
+	
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get latest aggregated recommendation: %v", err)
+		}
+		return nil, false
+	}
+	
+	// Unmarshal JSON fields
+	if err := json.Unmarshal(suggestedActionsJSON, &rec.SuggestedActions); err != nil {
+		log.Printf("Failed to unmarshal suggested actions: %v", err)
+		rec.SuggestedActions = []models.SuggestedAction{}
+	}
+	if err := json.Unmarshal(keyInsightsJSON, &rec.KeyInsights); err != nil {
+		log.Printf("Failed to unmarshal key insights: %v", err)
+		rec.KeyInsights = []string{}
+	}
+	if err := json.Unmarshal(executionIDsJSON, &rec.ExecutionIDs); err != nil {
+		log.Printf("Failed to unmarshal execution IDs: %v", err)
+		rec.ExecutionIDs = []string{}
+	}
+	
+	rec.CreatedAt = parseTimestamp(createdAt)
+	rec.UpdatedAt = parseTimestamp(updatedAt)
+	
+	return &rec, true
+}
+
+// CreateOrUpdateAggregatedRecommendation creates or updates an aggregated recommendation
+func (s *PostgresStore) CreateOrUpdateAggregatedRecommendation(rec *models.AggregatedRecommendation) error {
+	ctx, cancel := s.getContext()
+	defer cancel()
+	
+	// Marshal JSON fields
+	suggestedActionsJSON, err := json.Marshal(rec.SuggestedActions)
+	if err != nil {
+		log.Printf("Failed to marshal suggested actions: %v", err)
+		suggestedActionsJSON = []byte("[]")
+	}
+	
+	keyInsightsJSON, err := json.Marshal(rec.KeyInsights)
+	if err != nil {
+		log.Printf("Failed to marshal key insights: %v", err)
+		keyInsightsJSON = []byte("[]")
+	}
+	
+	executionIDsJSON, err := json.Marshal(rec.ExecutionIDs)
+	if err != nil {
+		log.Printf("Failed to marshal execution IDs: %v", err)
+		return fmt.Errorf("failed to marshal execution IDs: %w", err)
+	}
+	
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO aggregated_recommendations (id, action, confidence, suggested_actions, summary, key_insights, execution_ids, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		 ON CONFLICT (id) DO UPDATE SET
+		 action = EXCLUDED.action,
+		 confidence = EXCLUDED.confidence,
+		 suggested_actions = EXCLUDED.suggested_actions,
+		 summary = EXCLUDED.summary,
+		 key_insights = EXCLUDED.key_insights,
+		 execution_ids = EXCLUDED.execution_ids,
+		 updated_at = CURRENT_TIMESTAMP`,
+		rec.ID, rec.Action, rec.Confidence, suggestedActionsJSON, rec.Summary, keyInsightsJSON, executionIDsJSON)
+	
+	if err != nil {
+		log.Printf("Failed to create/update aggregated recommendation %s: %v", rec.ID, err)
+		return fmt.Errorf("failed to create/update aggregated recommendation: %w", err)
+	}
+	
+	return nil
+}

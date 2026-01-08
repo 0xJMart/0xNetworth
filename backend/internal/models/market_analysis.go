@@ -29,4 +29,17 @@ type Recommendation struct {
 	CreatedAt      string           `json:"created_at,omitempty"` // ISO 8601 timestamp
 }
 
+// AggregatedRecommendation represents a consolidated recommendation from multiple videos
+type AggregatedRecommendation struct {
+	ID              string           `json:"id"`
+	Action          string           `json:"action"`
+	Confidence      float64          `json:"confidence"`
+	SuggestedActions []SuggestedAction `json:"suggested_actions"`
+	Summary         string           `json:"summary"`
+	KeyInsights     []string         `json:"key_insights"`
+	ExecutionIDs    []string         `json:"execution_ids"` // IDs of executions used to generate this
+	CreatedAt       string           `json:"created_at,omitempty"`
+	UpdatedAt       string           `json:"updated_at,omitempty"`
+}
+
 

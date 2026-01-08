@@ -535,12 +535,13 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 	// Generate aggregated summary from most recent 10 videos (legacy text-based)
 	summary.AggregatedSummary = h.generateAggregatedSummary(allCompletedExecutions)
 	
-	// Generate AI-powered aggregated recommendation from most recent 10 videos
-	aggregatedRec, err := h.generateAggregatedRecommendation(allCompletedExecutions)
+	// Get or generate AI-powered aggregated recommendation
+	// Only regenerate if there are new videos that weren't included in the last recommendation
+	aggregatedRec, err := h.getOrGenerateAggregatedRecommendation(allCompletedExecutions)
 	if err != nil {
-		log.Printf("Failed to generate aggregated recommendation: %v", err)
+		log.Printf("Failed to get/generate aggregated recommendation: %v", err)
 		// Don't fail the request, just log the error
-	} else {
+	} else if aggregatedRec != nil {
 		summary.AggregatedRecommendation = aggregatedRec
 	}
 	
@@ -729,8 +730,8 @@ func min(a, b int) int {
 	return b
 }
 
-// generateAggregatedRecommendation creates an AI-powered consolidated recommendation from the most recent 10 completed workflow executions
-func (h *WorkflowHandler) generateAggregatedRecommendation(executions []*models.WorkflowExecution) (*AggregatedRecommendationResponse, error) {
+// getOrGenerateAggregatedRecommendation gets the cached recommendation or generates a new one if there are new videos
+func (h *WorkflowHandler) getOrGenerateAggregatedRecommendation(executions []*models.WorkflowExecution) (*AggregatedRecommendationResponse, error) {
 	if len(executions) == 0 {
 		return nil, fmt.Errorf("no workflow executions provided")
 	}
@@ -750,6 +751,56 @@ func (h *WorkflowHandler) generateAggregatedRecommendation(executions []*models.
 	}
 	recentExecutions := executions[:limit]
 	
+	// Get execution IDs for comparison
+	currentExecutionIDs := make([]string, len(recentExecutions))
+	for i, exec := range recentExecutions {
+		currentExecutionIDs[i] = exec.ID
+	}
+	
+	// Check if we have a cached aggregated recommendation
+	cachedRec, exists := h.store.GetLatestAggregatedRecommendation()
+	if exists {
+		// Check if the execution IDs match (no new videos)
+		if len(cachedRec.ExecutionIDs) == len(currentExecutionIDs) {
+			executionIDSet := make(map[string]bool)
+			for _, id := range cachedRec.ExecutionIDs {
+				executionIDSet[id] = true
+			}
+			
+			// Check if all current execution IDs are in the cached set
+			allMatch := true
+			for _, id := range currentExecutionIDs {
+				if !executionIDSet[id] {
+					allMatch = false
+					break
+				}
+			}
+			
+			if allMatch {
+				// No new videos, return cached recommendation
+				suggestedActions := make([]SuggestedActionResponse, len(cachedRec.SuggestedActions))
+				for i, sa := range cachedRec.SuggestedActions {
+					suggestedActions[i] = SuggestedActionResponse{
+						Type:      sa.Type,
+						Symbol:    sa.Symbol,
+						Rationale: sa.Rationale,
+					}
+				}
+				
+				return &AggregatedRecommendationResponse{
+					Action:           cachedRec.Action,
+					Confidence:       cachedRec.Confidence,
+					SuggestedActions: suggestedActions,
+					Summary:          cachedRec.Summary,
+					KeyInsights:      cachedRec.KeyInsights,
+				}, nil
+			}
+		}
+	}
+	
+	// New videos detected or no cached recommendation, generate a new one
+	log.Printf("Generating new aggregated recommendation (new videos detected or no cache)")
+	
 	// Build portfolio context
 	portfolioContext := h.engine.BuildPortfolioContext()
 	
@@ -757,6 +808,31 @@ func (h *WorkflowHandler) generateAggregatedRecommendation(executions []*models.
 	aggregatedRec, err := h.engine.GenerateAggregatedRecommendation(recentExecutions, portfolioContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate aggregated recommendation: %w", err)
+	}
+	
+	// Store the aggregated recommendation with execution IDs
+	recID := "latest" // Use a fixed ID so we always update the same record
+	storedRec := &models.AggregatedRecommendation{
+		ID:              recID,
+		Action:          aggregatedRec.Action,
+		Confidence:      aggregatedRec.Confidence,
+		SuggestedActions: make([]models.SuggestedAction, len(aggregatedRec.SuggestedActions)),
+		Summary:         aggregatedRec.Summary,
+		KeyInsights:     aggregatedRec.KeyInsights,
+		ExecutionIDs:   currentExecutionIDs,
+	}
+	
+	for i, sa := range aggregatedRec.SuggestedActions {
+		storedRec.SuggestedActions[i] = models.SuggestedAction{
+			Type:      sa.Type,
+			Symbol:    sa.Symbol,
+			Rationale: sa.Rationale,
+		}
+	}
+	
+	if err := h.store.CreateOrUpdateAggregatedRecommendation(storedRec); err != nil {
+		log.Printf("Failed to store aggregated recommendation: %v", err)
+		// Continue anyway, we still return the recommendation
 	}
 	
 	// Convert to response format

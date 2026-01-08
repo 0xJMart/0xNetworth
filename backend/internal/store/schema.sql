@@ -111,6 +111,24 @@ CREATE TABLE IF NOT EXISTS workflow_executions (
     FOREIGN KEY (recommendation_id) REFERENCES recommendations(id) ON DELETE SET NULL
 );
 
+-- Aggregated recommendations table
+CREATE TABLE IF NOT EXISTS aggregated_recommendations (
+    id VARCHAR(255) PRIMARY KEY,
+    action VARCHAR(100) NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    suggested_actions JSONB,
+    summary TEXT NOT NULL,
+    key_insights JSONB,
+    execution_ids JSONB NOT NULL, -- Array of execution IDs used to generate this recommendation
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_aggregated_recommendations_created_at ON aggregated_recommendations(created_at DESC);
+CREATE TRIGGER update_aggregated_recommendations_updated_at
+    BEFORE UPDATE ON aggregated_recommendations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_investments_account_id ON investments(account_id);
 CREATE INDEX IF NOT EXISTS idx_investments_platform ON investments(platform);
