@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 
+	"0xnetworth/backend/internal/integrations/scraper"
 	"0xnetworth/backend/internal/integrations/youtube"
 	"0xnetworth/backend/internal/models"
 	"0xnetworth/backend/internal/store"
@@ -91,6 +93,7 @@ type CreateYouTubeSourceRequest struct {
 	Name     string                   `json:"name" binding:"required"`
 	Enabled  bool                     `json:"enabled"`
 	Schedule string                   `json:"schedule,omitempty"`
+	AuthEmail string                  `json:"auth_email,omitempty"` // For web scraper sources
 }
 
 // CreateYouTubeSource handles POST /api/workflow/sources
@@ -108,6 +111,7 @@ func (h *WorkflowHandler) CreateYouTubeSource(c *gin.Context) {
 		Name:      req.Name,
 		Enabled:   req.Enabled,
 		Schedule:  req.Schedule,
+		AuthEmail: req.AuthEmail,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -214,6 +218,9 @@ func (h *WorkflowHandler) UpdateYouTubeSource(c *gin.Context) {
 	if req.Schedule != "" {
 		source.Schedule = req.Schedule
 	}
+	if req.AuthEmail != "" {
+		source.AuthEmail = req.AuthEmail
+	}
 
 	h.store.CreateOrUpdateYouTubeSource(source)
 	
@@ -275,6 +282,253 @@ func (h *WorkflowHandler) TestYouTubeSource(c *gin.Context) {
 		"success": true,
 		"channel_id": channelID,
 		"message": "Channel found and accessible",
+	})
+}
+
+// TestWebScraperSourceRequest represents the request body for testing a web scraper source
+type TestWebScraperSourceRequest struct {
+	URL      string `json:"url" binding:"required"`
+	Email    string `json:"email,omitempty"`
+	OTPCode  string `json:"otp_code,omitempty"`
+}
+
+// TestWebScraperSource handles POST /api/workflow/sources/:id/test-scraper
+func (h *WorkflowHandler) TestWebScraperSource(c *gin.Context) {
+	id := c.Param("id")
+	
+	source, exists := h.store.GetYouTubeSourceByID(id)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source not found"})
+		return
+	}
+	
+	if source.Type != models.YouTubeSourceTypeWebScraper {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source is not a web scraper source"})
+		return
+	}
+	
+	var req TestWebScraperSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	// Use source URL if not provided in request
+	if req.URL == "" {
+		req.URL = source.URL
+	}
+	
+	// Use source email if not provided in request
+	if req.Email == "" {
+		req.Email = source.AuthEmail
+	}
+	
+	// Initialize scraper client
+	headless := os.Getenv("SCRAPER_HEADLESS")
+	if headless == "" {
+		headless = "true"
+	}
+	headlessMode := headless == "true"
+	
+	timeoutStr := os.Getenv("SCRAPER_TIMEOUT")
+	if timeoutStr == "" {
+		timeoutStr = "30s"
+	}
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		timeout = 30 * time.Second
+	}
+	
+	scraperClient := scraper.NewClient(headlessMode, timeout)
+	ctx := context.Background()
+	
+	// Try to load existing session if we have cookies and no OTP provided
+	if source.AuthSessionCookie != "" && req.OTPCode == "" {
+		cookies, err := scraper.DeserializeCookies(source.AuthSessionCookie)
+		if err == nil {
+			err = scraperClient.LoadSession(ctx, cookies, req.URL)
+			if err == nil {
+				// Test URL extraction
+				result, err := scraperClient.ExtractYouTubeURLs(ctx, req.URL)
+				if err == nil && result.Error == "" {
+					c.JSON(http.StatusOK, gin.H{
+						"success": true,
+						"message": "Session valid and URLs extracted successfully",
+						"urls_found": len(result.URLs),
+						"urls": result.URLs,
+					})
+					return
+				}
+			}
+		}
+	}
+	
+	// If OTP is provided, try authentication
+	if req.OTPCode != "" && req.Email != "" {
+		loginURL := "https://app.intothecryptoverse.com/login" // Default login URL
+		authResult, err := scraperClient.Authenticate(ctx, req.Email, req.OTPCode, loginURL)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"error": err.Error(),
+			})
+			return
+		}
+		
+		if !authResult.Success {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"error": authResult.Error,
+			})
+			return
+		}
+		
+		// Save session cookies
+		cookieData, err := scraper.SerializeCookies(authResult.SessionCookies)
+		if err == nil {
+			source.AuthSessionCookie = cookieData
+			source.AuthEmail = req.Email
+			source.AuthLastRefreshed = time.Now().UTC().Format(time.RFC3339)
+			h.store.CreateOrUpdateYouTubeSource(source)
+		}
+		
+		// Test URL extraction
+		result, err := scraperClient.ExtractYouTubeURLs(ctx, req.URL)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Authentication successful, but URL extraction failed",
+				"error": err.Error(),
+			})
+			return
+		}
+		
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "Authentication successful and URLs extracted",
+			"urls_found": len(result.URLs),
+			"urls": result.URLs,
+		})
+		return
+	}
+	
+	c.JSON(http.StatusBadRequest, gin.H{
+		"success": false,
+		"error": "No valid session found and no OTP code provided. Please provide OTP code for authentication.",
+	})
+}
+
+// RefreshWebScraperAuthRequest represents the request body for refreshing web scraper authentication
+type RefreshWebScraperAuthRequest struct {
+	Email   string `json:"email" binding:"required"`
+	OTPCode string `json:"otp_code" binding:"required"`
+}
+
+// RefreshWebScraperAuth handles POST /api/workflow/sources/:id/refresh-auth
+func (h *WorkflowHandler) RefreshWebScraperAuth(c *gin.Context) {
+	id := c.Param("id")
+	
+	source, exists := h.store.GetYouTubeSourceByID(id)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source not found"})
+		return
+	}
+	
+	if source.Type != models.YouTubeSourceTypeWebScraper {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source is not a web scraper source"})
+		return
+	}
+	
+	var req RefreshWebScraperAuthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	
+	// Initialize scraper client
+	headless := os.Getenv("SCRAPER_HEADLESS")
+	if headless == "" {
+		headless = "true"
+	}
+	headlessMode := headless == "true"
+	
+	timeoutStr := os.Getenv("SCRAPER_TIMEOUT")
+	if timeoutStr == "" {
+		timeoutStr = "30s"
+	}
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		timeout = 30 * time.Second
+	}
+	
+	scraperClient := scraper.NewClient(headlessMode, timeout)
+	ctx := context.Background()
+	
+	// Authenticate
+	loginURL := "https://app.intothecryptoverse.com/login" // Default login URL
+	authResult, err := scraperClient.Authenticate(ctx, req.Email, req.OTPCode, loginURL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error": err.Error(),
+		})
+		return
+	}
+	
+	if !authResult.Success {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error": authResult.Error,
+		})
+		return
+	}
+	
+	// Save session cookies
+	cookieData, err := scraper.SerializeCookies(authResult.SessionCookies)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error": fmt.Sprintf("Failed to serialize cookies: %v", err),
+		})
+		return
+	}
+	
+	source.AuthSessionCookie = cookieData
+	source.AuthEmail = req.Email
+	source.AuthLastRefreshed = time.Now().UTC().Format(time.RFC3339)
+	h.store.CreateOrUpdateYouTubeSource(source)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Authentication refreshed successfully",
+		"cookies_count": len(authResult.SessionCookies),
+	})
+}
+
+// GetWebScraperAuthStatus handles GET /api/workflow/sources/:id/auth-status
+func (h *WorkflowHandler) GetWebScraperAuthStatus(c *gin.Context) {
+	id := c.Param("id")
+	
+	source, exists := h.store.GetYouTubeSourceByID(id)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source not found"})
+		return
+	}
+	
+	if source.Type != models.YouTubeSourceTypeWebScraper {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source is not a web scraper source"})
+		return
+	}
+	
+	hasSession := source.AuthSessionCookie != ""
+	hasEmail := source.AuthEmail != ""
+	
+	c.JSON(http.StatusOK, gin.H{
+		"has_session": hasSession,
+		"has_email": hasEmail,
+		"email": source.AuthEmail,
+		"last_refreshed": source.AuthLastRefreshed,
+		"needs_auth": !hasSession,
 	})
 }
 

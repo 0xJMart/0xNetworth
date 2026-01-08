@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"0xnetworth/backend/internal/integrations/scraper"
 	"0xnetworth/backend/internal/integrations/youtube"
 	"0xnetworth/backend/internal/models"
 	"0xnetworth/backend/internal/store"
@@ -125,6 +127,12 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 	source, exists := s.store.GetYouTubeSourceByID(sourceID)
 	if !exists {
 		log.Printf("Source %s not found", sourceID)
+		return
+	}
+	
+	// Route to appropriate handler based on source type
+	if source.Type == models.YouTubeSourceTypeWebScraper {
+		s.executeWebScraperSource(sourceID, source)
 		return
 	}
 	
@@ -337,6 +345,152 @@ type SourceDisabledError struct {
 
 func (e *SourceDisabledError) Error() string {
 	return "source is disabled: " + e.SourceID
+}
+
+// executeWebScraperSource executes workflow for a web scraper source
+func (s *Scheduler) executeWebScraperSource(sourceID string, source *models.YouTubeSource) {
+	log.Printf("Executing web scraper source %s: %s", sourceID, source.URL)
+	
+	// Initialize scraper client
+	headless := os.Getenv("SCRAPER_HEADLESS")
+	if headless == "" {
+		headless = "true"
+	}
+	headlessMode := headless == "true"
+	
+	timeoutStr := os.Getenv("SCRAPER_TIMEOUT")
+	if timeoutStr == "" {
+		timeoutStr = "30s"
+	}
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		timeout = 30 * time.Second
+	}
+	
+	scraperClient := scraper.NewClient(headlessMode, timeout)
+	ctx := context.Background()
+	
+	// Try to load existing session cookies
+	var cookies []scraper.SessionCookie
+	if source.AuthSessionCookie != "" {
+		deserialized, err := scraper.DeserializeCookies(source.AuthSessionCookie)
+		if err == nil {
+			cookies = deserialized
+			log.Printf("Loaded %d session cookies for source %s", len(cookies), sourceID)
+		} else {
+			log.Printf("Failed to deserialize cookies for source %s: %v", sourceID, err)
+		}
+	}
+	
+	// If we have cookies, try to use them; otherwise require authentication
+	if len(cookies) > 0 {
+		err = scraperClient.LoadSession(ctx, cookies, source.URL)
+		if err != nil {
+			log.Printf("Failed to load session for source %s: %v. Authentication may be required.", sourceID, err)
+			// Mark source as needing authentication refresh
+			source.AuthSessionCookie = ""
+			s.store.CreateOrUpdateYouTubeSource(source)
+			return
+		}
+	} else {
+		log.Printf("No session cookies found for source %s. Authentication required.", sourceID)
+		// Mark source as needing authentication
+		return
+	}
+	
+	// Extract YouTube URLs from the page
+	result, err := scraperClient.ExtractYouTubeURLs(ctx, source.URL)
+	if err != nil {
+		log.Printf("Error extracting YouTube URLs from %s: %v", source.URL, err)
+		return
+	}
+	
+	if result.Error != "" {
+		log.Printf("Error in URL extraction result: %s", result.Error)
+		return
+	}
+	
+	if len(result.URLs) == 0 {
+		log.Printf("No YouTube URLs found on page %s", source.URL)
+		// Update last processed time even if no videos found
+		now := time.Now().UTC().Format(time.RFC3339)
+		source.LastProcessed = now
+		s.store.CreateOrUpdateYouTubeSource(source)
+		return
+	}
+	
+	log.Printf("Found %d YouTube URLs on page %s", len(result.URLs), source.URL)
+	
+	// Get already processed video IDs for this source
+	processedVideoIDs := s.getProcessedVideoIDs(sourceID)
+	
+	// Process each new video
+	processedCount := 0
+	latestProcessedTime := source.LastProcessed
+	
+	for _, videoURL := range result.URLs {
+		// Extract video ID from URL
+		videoID := s.extractVideoIDFromURL(videoURL)
+		if videoID == "" {
+			log.Printf("Could not extract video ID from URL: %s", videoURL)
+			continue
+		}
+		
+		// Skip if already processed
+		if processedVideoIDs[videoID] {
+			log.Printf("Skipping already processed video: %s", videoID)
+			continue
+		}
+		
+		log.Printf("Processing new video: %s (%s)", videoID, videoURL)
+		execution, err := s.engine.ExecuteWorkflow(videoURL, sourceID)
+		if err != nil {
+			log.Printf("Error executing workflow for video %s: %v", videoID, err)
+			continue
+		}
+		
+		processedCount++
+		
+		// Update latest processed time
+		if execution.CompletedAt != "" {
+			latestProcessedTime = execution.CompletedAt
+		} else if execution.StartedAt != "" {
+			latestProcessedTime = execution.StartedAt
+		}
+		
+		log.Printf("Workflow execution completed for video %s: %s", videoID, execution.ID)
+	}
+	
+	// Update source last processed time
+	if latestProcessedTime != "" {
+		source.LastProcessed = latestProcessedTime
+		s.store.CreateOrUpdateYouTubeSource(source)
+	}
+	
+	log.Printf("Processed %d new videos from web scraper source %s", processedCount, sourceID)
+}
+
+// extractVideoIDFromURL extracts video ID from YouTube URL
+func (s *Scheduler) extractVideoIDFromURL(url string) string {
+	// Pattern: https://www.youtube.com/watch?v=VIDEO_ID
+	if strings.Contains(url, "watch?v=") {
+		parts := strings.Split(url, "watch?v=")
+		if len(parts) > 1 {
+			videoID := strings.Split(parts[1], "&")[0]
+			videoID = strings.Split(videoID, "#")[0]
+			return videoID
+		}
+	}
+	// Pattern: https://youtu.be/VIDEO_ID
+	if strings.Contains(url, "youtu.be/") {
+		parts := strings.Split(url, "youtu.be/")
+		if len(parts) > 1 {
+			videoID := strings.Split(parts[1], "?")[0]
+			videoID = strings.Split(videoID, "#")[0]
+			return videoID
+		}
+	}
+	return ""
 }
 
 // ReloadSourceSchedule reloads the cron schedule for a specific source
