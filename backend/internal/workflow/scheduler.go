@@ -197,7 +197,7 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 	// This simple delay helps prevent rapid quota consumption
 	time.Sleep(100 * time.Millisecond)
 	
-	videos, err := s.youtubeClient.GetChannelVideos(channelID, 50, publishedAfter)
+	videos, err := s.youtubeClient.GetChannelVideos(channelID, 5, publishedAfter)
 	if err != nil {
 		// Log quota-related errors specifically
 		if apiErr, ok := err.(*youtube.APIError); ok && apiErr.StatusCode == http.StatusForbidden {
