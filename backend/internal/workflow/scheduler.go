@@ -182,22 +182,14 @@ func (s *Scheduler) executeSource(sourceID string, sourceURL string) {
 		log.Printf("Resolved channel ID for source %s: %s", sourceID, channelID)
 	}
 	
-	// Determine publishedAfter time from last processed timestamp
-	var publishedAfter *time.Time
-	if source.LastProcessed != "" {
-		parsed, err := time.Parse(time.RFC3339, source.LastProcessed)
-		if err == nil {
-			publishedAfter = &parsed
-		}
-	}
-	
-	// Fetch videos from channel
+	// Always fetch only the last 5 videos (most recent), regardless of last processed time
+	// This ensures we only ever process the 5 most recent videos and don't catch up on older ones
 	// Add rate limiting: wait 100ms before API call to avoid quota issues
 	// YouTube API allows 10,000 units/day, each search costs 100 units
 	// This simple delay helps prevent rapid quota consumption
 	time.Sleep(100 * time.Millisecond)
 	
-	videos, err := s.youtubeClient.GetChannelVideos(channelID, 5, publishedAfter)
+	videos, err := s.youtubeClient.GetChannelVideos(channelID, 5, nil)
 	if err != nil {
 		// Log quota-related errors specifically
 		if apiErr, ok := err.(*youtube.APIError); ok && apiErr.StatusCode == http.StatusForbidden {
