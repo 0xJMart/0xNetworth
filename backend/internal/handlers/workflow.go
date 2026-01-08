@@ -25,13 +25,13 @@ const (
 
 // WorkflowHandler handles workflow-related HTTP requests
 type WorkflowHandler struct {
-	store    *store.Store
+	store    store.Store
 	engine   *workflow.Engine
 	scheduler *workflow.Scheduler
 }
 
 // NewWorkflowHandler creates a new workflow handler
-func NewWorkflowHandler(store *store.Store, engine *workflow.Engine, scheduler *workflow.Scheduler) *WorkflowHandler {
+func NewWorkflowHandler(store store.Store, engine *workflow.Engine, scheduler *workflow.Scheduler) *WorkflowHandler {
 	return &WorkflowHandler{
 		store:     store,
 		engine:    engine,

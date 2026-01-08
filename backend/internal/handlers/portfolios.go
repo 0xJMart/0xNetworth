@@ -11,11 +11,11 @@ import (
 
 // PortfoliosHandler handles portfolio-related HTTP requests
 type PortfoliosHandler struct {
-	store *store.Store
+	store store.Store
 }
 
 // NewPortfoliosHandler creates a new portfolios handler
-func NewPortfoliosHandler(store *store.Store) *PortfoliosHandler {
+func NewPortfoliosHandler(store store.Store) *PortfoliosHandler {
 	return &PortfoliosHandler{
 		store: store,
 	}

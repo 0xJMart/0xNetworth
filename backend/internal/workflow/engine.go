@@ -13,12 +13,12 @@ import (
 
 // Engine orchestrates workflow executions
 type Engine struct {
-	store         *store.Store
+	store         store.Store
 	workflowClient *workflowclient.Client
 }
 
 // NewEngine creates a new workflow engine
-func NewEngine(store *store.Store, workflowClient *workflowclient.Client) *Engine {
+func NewEngine(store store.Store, workflowClient *workflowclient.Client) *Engine {
 	return &Engine{
 		store:          store,
 		workflowClient: workflowClient,

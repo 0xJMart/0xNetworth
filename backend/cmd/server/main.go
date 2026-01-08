@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"0xnetworth/backend/internal/handlers"
@@ -16,8 +18,64 @@ import (
 )
 
 func main() {
-	// Initialize store
-	store := store.NewStore()
+	// Initialize store - use PostgreSQL if DATABASE_URL is set, otherwise fall back to in-memory
+	var storeInstance store.Store
+	databaseURL := os.Getenv("DATABASE_URL")
+	
+	// Build DATABASE_URL from individual components if not provided
+	if databaseURL == "" {
+		dbHost := os.Getenv("DB_HOST")
+		dbPort := os.Getenv("DB_PORT")
+		dbUser := os.Getenv("DB_USER")
+		dbPassword := os.Getenv("DB_PASSWORD")
+		dbName := os.Getenv("DB_NAME")
+		
+		if dbHost != "" && dbUser != "" && dbPassword != "" && dbName != "" {
+			if dbPort == "" {
+				dbPort = "5432"
+			}
+			databaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+		}
+	}
+
+	if databaseURL != "" {
+		log.Println("Initializing PostgreSQL store...")
+		postgresStore, err := store.NewPostgresStore(databaseURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL store: %v", err)
+		}
+		defer postgresStore.Close()
+
+		// Read and execute schema
+		// Get the path to schema.sql relative to the executable
+		execPath, err := os.Executable()
+		if err != nil {
+			// Fallback: try relative path from current working directory
+			execPath = "."
+		}
+		schemaPath := filepath.Join(filepath.Dir(execPath), "..", "internal", "store", "schema.sql")
+		// Also try relative to current working directory (for development)
+		if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
+			schemaPath = filepath.Join("internal", "store", "schema.sql")
+		}
+		schemaSQL, err := os.ReadFile(schemaPath)
+		if err != nil {
+			log.Printf("Warning: Failed to read schema file at %s: %v. Schema may need to be initialized manually.", schemaPath, err)
+		} else {
+
+			if err := postgresStore.InitSchema(string(schemaSQL)); err != nil {
+				log.Printf("Warning: Failed to initialize schema (may already exist): %v", err)
+			} else {
+				log.Println("Database schema initialized successfully")
+			}
+		}
+
+		storeInstance = postgresStore
+		log.Println("PostgreSQL store initialized successfully")
+	} else {
+		log.Println("Warning: DATABASE_URL not set, using in-memory store (data will not persist)")
+		storeInstance = store.NewStore()
+	}
 
 	// Initialize Coinbase client if API keys are provided
 	// Coinbase Advanced Trade API uses CDP API Keys for authentication
@@ -53,15 +111,15 @@ func main() {
 	workflowClient := workflowclient.NewClient(workflowServiceURL)
 
 	// Initialize workflow engine and scheduler
-	workflowEngine := workflow.NewEngine(store, workflowClient)
-	workflowScheduler := workflow.NewScheduler(store, workflowEngine)
+	workflowEngine := workflow.NewEngine(storeInstance, workflowClient)
+	workflowScheduler := workflow.NewScheduler(storeInstance, workflowEngine)
 
 	// Initialize handlers
-	portfoliosHandler := handlers.NewPortfoliosHandler(store)
-	investmentsHandler := handlers.NewInvestmentsHandler(store)
-	networthHandler := handlers.NewNetWorthHandler(store)
-	syncHandler := handlers.NewSyncHandler(store, coinbaseClient)
-	workflowHandler := handlers.NewWorkflowHandler(store, workflowEngine, workflowScheduler)
+	portfoliosHandler := handlers.NewPortfoliosHandler(storeInstance)
+	investmentsHandler := handlers.NewInvestmentsHandler(storeInstance)
+	networthHandler := handlers.NewNetWorthHandler(storeInstance)
+	syncHandler := handlers.NewSyncHandler(storeInstance, coinbaseClient)
+	workflowHandler := handlers.NewWorkflowHandler(storeInstance, workflowEngine, workflowScheduler)
 
 	// Setup router
 	router := gin.Default()

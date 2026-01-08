@@ -10,11 +10,11 @@ import (
 
 // NetWorthHandler handles net worth-related HTTP requests
 type NetWorthHandler struct {
-	store *store.Store
+	store store.Store
 }
 
 // NewNetWorthHandler creates a new net worth handler
-func NewNetWorthHandler(store *store.Store) *NetWorthHandler {
+func NewNetWorthHandler(store store.Store) *NetWorthHandler {
 	return &NetWorthHandler{
 		store: store,
 	}

@@ -7,8 +7,8 @@ import (
 	"0xnetworth/backend/internal/models"
 )
 
-// Store is an in-memory store for investment data
-type Store struct {
+// MemoryStore is an in-memory store for investment data
+type MemoryStore struct {
 	mu              sync.RWMutex
 	portfolios      map[string]*models.Portfolio
 	investments     map[string]*models.Investment
@@ -22,8 +22,8 @@ type Store struct {
 }
 
 // NewStore creates a new in-memory store
-func NewStore() *Store {
-	return &Store{
+func NewStore() Store {
+	return &MemoryStore{
 		portfolios:      make(map[string]*models.Portfolio),
 		investments:     make(map[string]*models.Investment),
 		networth:        &models.NetWorth{},
@@ -38,7 +38,7 @@ func NewStore() *Store {
 // Portfolio operations
 
 // GetAllPortfolios returns all portfolios
-func (s *Store) GetAllPortfolios() []*models.Portfolio {
+func (s *MemoryStore) GetAllPortfolios() []*models.Portfolio {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -50,7 +50,7 @@ func (s *Store) GetAllPortfolios() []*models.Portfolio {
 }
 
 // GetPortfoliosByPlatform returns portfolios for a specific platform
-func (s *Store) GetPortfoliosByPlatform(platform models.Platform) []*models.Portfolio {
+func (s *MemoryStore) GetPortfoliosByPlatform(platform models.Platform) []*models.Portfolio {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -64,7 +64,7 @@ func (s *Store) GetPortfoliosByPlatform(platform models.Platform) []*models.Port
 }
 
 // GetPortfolioByID returns a portfolio by ID
-func (s *Store) GetPortfolioByID(id string) (*models.Portfolio, bool) {
+func (s *MemoryStore) GetPortfolioByID(id string) (*models.Portfolio, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -73,7 +73,7 @@ func (s *Store) GetPortfolioByID(id string) (*models.Portfolio, bool) {
 }
 
 // CreateOrUpdatePortfolio creates or updates a portfolio
-func (s *Store) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
+func (s *MemoryStore) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -81,7 +81,7 @@ func (s *Store) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 }
 
 // DeletePortfolio deletes a portfolio by ID
-func (s *Store) DeletePortfolio(id string) bool {
+func (s *MemoryStore) DeletePortfolio(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -95,7 +95,7 @@ func (s *Store) DeletePortfolio(id string) bool {
 // Investment operations
 
 // GetAllInvestments returns all investments
-func (s *Store) GetAllInvestments() []*models.Investment {
+func (s *MemoryStore) GetAllInvestments() []*models.Investment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -107,7 +107,7 @@ func (s *Store) GetAllInvestments() []*models.Investment {
 }
 
 // GetInvestmentsByAccount returns investments for a specific account
-func (s *Store) GetInvestmentsByAccount(accountID string) []*models.Investment {
+func (s *MemoryStore) GetInvestmentsByAccount(accountID string) []*models.Investment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -121,7 +121,7 @@ func (s *Store) GetInvestmentsByAccount(accountID string) []*models.Investment {
 }
 
 // GetInvestmentsByPlatform returns investments for a specific platform
-func (s *Store) GetInvestmentsByPlatform(platform models.Platform) []*models.Investment {
+func (s *MemoryStore) GetInvestmentsByPlatform(platform models.Platform) []*models.Investment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -135,7 +135,7 @@ func (s *Store) GetInvestmentsByPlatform(platform models.Platform) []*models.Inv
 }
 
 // CreateOrUpdateInvestment creates or updates an investment
-func (s *Store) CreateOrUpdateInvestment(investment *models.Investment) {
+func (s *MemoryStore) CreateOrUpdateInvestment(investment *models.Investment) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -143,7 +143,7 @@ func (s *Store) CreateOrUpdateInvestment(investment *models.Investment) {
 }
 
 // DeleteInvestment deletes an investment by ID
-func (s *Store) DeleteInvestment(id string) bool {
+func (s *MemoryStore) DeleteInvestment(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -157,7 +157,7 @@ func (s *Store) DeleteInvestment(id string) bool {
 // NetWorth operations
 
 // GetNetWorth returns the current net worth
-func (s *Store) GetNetWorth() *models.NetWorth {
+func (s *MemoryStore) GetNetWorth() *models.NetWorth {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -167,7 +167,7 @@ func (s *Store) GetNetWorth() *models.NetWorth {
 }
 
 // UpdateNetWorth updates the net worth calculation
-func (s *Store) UpdateNetWorth(networth *models.NetWorth) {
+func (s *MemoryStore) UpdateNetWorth(networth *models.NetWorth) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -175,7 +175,7 @@ func (s *Store) UpdateNetWorth(networth *models.NetWorth) {
 }
 
 // RecalculateNetWorth recalculates net worth from current accounts and investments
-func (s *Store) RecalculateNetWorth() {
+func (s *MemoryStore) RecalculateNetWorth() *models.NetWorth {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -197,10 +197,11 @@ func (s *Store) RecalculateNetWorth() {
 	networth.TotalValue = totalValue
 	networth.AccountCount = len(s.portfolios) // Use portfolio count instead of account count
 	s.networth = networth
+	return networth
 }
 
 // GetLastSyncTime returns the last sync time
-func (s *Store) GetLastSyncTime() time.Time {
+func (s *MemoryStore) GetLastSyncTime() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -208,7 +209,7 @@ func (s *Store) GetLastSyncTime() time.Time {
 }
 
 // SetLastSyncTime sets the last sync time
-func (s *Store) SetLastSyncTime(t time.Time) {
+func (s *MemoryStore) SetLastSyncTime(t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -218,7 +219,7 @@ func (s *Store) SetLastSyncTime(t time.Time) {
 // YouTube Source operations
 
 // GetAllYouTubeSources returns all YouTube sources
-func (s *Store) GetAllYouTubeSources() []*models.YouTubeSource {
+func (s *MemoryStore) GetAllYouTubeSources() []*models.YouTubeSource {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -230,7 +231,7 @@ func (s *Store) GetAllYouTubeSources() []*models.YouTubeSource {
 }
 
 // GetYouTubeSourceByID returns a YouTube source by ID
-func (s *Store) GetYouTubeSourceByID(id string) (*models.YouTubeSource, bool) {
+func (s *MemoryStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -239,7 +240,7 @@ func (s *Store) GetYouTubeSourceByID(id string) (*models.YouTubeSource, bool) {
 }
 
 // CreateOrUpdateYouTubeSource creates or updates a YouTube source
-func (s *Store) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
+func (s *MemoryStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -247,7 +248,7 @@ func (s *Store) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
 }
 
 // DeleteYouTubeSource deletes a YouTube source by ID
-func (s *Store) DeleteYouTubeSource(id string) bool {
+func (s *MemoryStore) DeleteYouTubeSource(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -261,7 +262,7 @@ func (s *Store) DeleteYouTubeSource(id string) bool {
 // Video Transcript operations
 
 // CreateOrUpdateTranscript creates or updates a video transcript
-func (s *Store) CreateOrUpdateTranscript(transcript *models.VideoTranscript) {
+func (s *MemoryStore) CreateOrUpdateTranscript(transcript *models.VideoTranscript) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -269,7 +270,7 @@ func (s *Store) CreateOrUpdateTranscript(transcript *models.VideoTranscript) {
 }
 
 // GetTranscriptByID returns a transcript by ID
-func (s *Store) GetTranscriptByID(id string) (*models.VideoTranscript, bool) {
+func (s *MemoryStore) GetTranscriptByID(id string) (*models.VideoTranscript, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -278,7 +279,7 @@ func (s *Store) GetTranscriptByID(id string) (*models.VideoTranscript, bool) {
 }
 
 // GetTranscriptsByVideoID returns transcripts for a specific video ID
-func (s *Store) GetTranscriptsByVideoID(videoID string) []*models.VideoTranscript {
+func (s *MemoryStore) GetTranscriptsByVideoID(videoID string) []*models.VideoTranscript {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -294,7 +295,7 @@ func (s *Store) GetTranscriptsByVideoID(videoID string) []*models.VideoTranscrip
 // Market Analysis operations
 
 // CreateOrUpdateMarketAnalysis creates or updates a market analysis
-func (s *Store) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnalysis) {
+func (s *MemoryStore) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnalysis) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -302,7 +303,7 @@ func (s *Store) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnalysis) {
 }
 
 // GetMarketAnalysisByID returns a market analysis by ID
-func (s *Store) GetMarketAnalysisByID(id string) (*models.MarketAnalysis, bool) {
+func (s *MemoryStore) GetMarketAnalysisByID(id string) (*models.MarketAnalysis, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -311,7 +312,7 @@ func (s *Store) GetMarketAnalysisByID(id string) (*models.MarketAnalysis, bool) 
 }
 
 // GetMarketAnalysesByTranscriptID returns market analyses for a specific transcript ID
-func (s *Store) GetMarketAnalysesByTranscriptID(transcriptID string) []*models.MarketAnalysis {
+func (s *MemoryStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*models.MarketAnalysis {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -327,7 +328,7 @@ func (s *Store) GetMarketAnalysesByTranscriptID(transcriptID string) []*models.M
 // Recommendation operations
 
 // CreateOrUpdateRecommendation creates or updates a recommendation
-func (s *Store) CreateOrUpdateRecommendation(recommendation *models.Recommendation) {
+func (s *MemoryStore) CreateOrUpdateRecommendation(recommendation *models.Recommendation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -335,7 +336,7 @@ func (s *Store) CreateOrUpdateRecommendation(recommendation *models.Recommendati
 }
 
 // GetRecommendationByID returns a recommendation by ID
-func (s *Store) GetRecommendationByID(id string) (*models.Recommendation, bool) {
+func (s *MemoryStore) GetRecommendationByID(id string) (*models.Recommendation, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -344,7 +345,7 @@ func (s *Store) GetRecommendationByID(id string) (*models.Recommendation, bool) 
 }
 
 // GetRecommendationsByAnalysisID returns recommendations for a specific analysis ID
-func (s *Store) GetRecommendationsByAnalysisID(analysisID string) []*models.Recommendation {
+func (s *MemoryStore) GetRecommendationsByAnalysisID(analysisID string) []*models.Recommendation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -360,7 +361,7 @@ func (s *Store) GetRecommendationsByAnalysisID(analysisID string) []*models.Reco
 // Workflow Execution operations
 
 // CreateOrUpdateWorkflowExecution creates or updates a workflow execution
-func (s *Store) CreateOrUpdateWorkflowExecution(execution *models.WorkflowExecution) {
+func (s *MemoryStore) CreateOrUpdateWorkflowExecution(execution *models.WorkflowExecution) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -368,7 +369,7 @@ func (s *Store) CreateOrUpdateWorkflowExecution(execution *models.WorkflowExecut
 }
 
 // GetWorkflowExecutionByID returns a workflow execution by ID
-func (s *Store) GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, bool) {
+func (s *MemoryStore) GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -377,7 +378,7 @@ func (s *Store) GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, 
 }
 
 // GetAllWorkflowExecutions returns all workflow executions
-func (s *Store) GetAllWorkflowExecutions() []*models.WorkflowExecution {
+func (s *MemoryStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -389,7 +390,7 @@ func (s *Store) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 }
 
 // GetWorkflowExecutionsBySourceID returns workflow executions for a specific source ID
-func (s *Store) GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution {
+func (s *MemoryStore) GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
