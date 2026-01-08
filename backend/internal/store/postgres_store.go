@@ -551,7 +551,7 @@ func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
 	ctx, cancel := s.getContext()
 	defer cancel()
 	rows, err := s.pool.Query(ctx,
-		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at FROM youtube_sources ORDER BY created_at DESC")
+		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, auth_email, auth_session_cookie, auth_last_refreshed, created_at, updated_at FROM youtube_sources ORDER BY created_at DESC")
 	if err != nil {
 		log.Printf("Failed to get all YouTube sources: %v", err)
 		return []*models.YouTubeSource{}
@@ -561,10 +561,10 @@ func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
 	sources := make([]*models.YouTubeSource, 0)
 	for rows.Next() {
 		var src models.YouTubeSource
-		var channelID, playlistID, schedule sql.NullString
-		var lastProcessed, createdAt, updatedAt sql.NullTime
+		var channelID, playlistID, schedule, authEmail, authSessionCookie sql.NullString
+		var lastProcessed, authLastRefreshed, createdAt, updatedAt sql.NullTime
 
-		err := rows.Scan(&src.ID, &src.Type, &src.URL, &src.Name, &channelID, &playlistID, &src.Enabled, &schedule, &lastProcessed, &createdAt, &updatedAt)
+		err := rows.Scan(&src.ID, &src.Type, &src.URL, &src.Name, &channelID, &playlistID, &src.Enabled, &schedule, &lastProcessed, &authEmail, &authSessionCookie, &authLastRefreshed, &createdAt, &updatedAt)
 		if err != nil {
 			continue
 		}
@@ -578,7 +578,14 @@ func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
 		if schedule.Valid {
 			src.Schedule = schedule.String
 		}
+		if authEmail.Valid {
+			src.AuthEmail = authEmail.String
+		}
+		if authSessionCookie.Valid {
+			src.AuthSessionCookie = authSessionCookie.String
+		}
 		src.LastProcessed = parseTimestamp(lastProcessed)
+		src.AuthLastRefreshed = parseTimestamp(authLastRefreshed)
 
 		sources = append(sources, &src)
 	}
@@ -591,12 +598,12 @@ func (s *PostgresStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, 
 	ctx, cancel := s.getContext()
 	defer cancel()
 	var src models.YouTubeSource
-	var channelID, playlistID, schedule sql.NullString
-	var lastProcessed, createdAt, updatedAt sql.NullTime
+	var channelID, playlistID, schedule, authEmail, authSessionCookie sql.NullString
+	var lastProcessed, authLastRefreshed, createdAt, updatedAt sql.NullTime
 
 	err := s.pool.QueryRow(ctx,
-		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at FROM youtube_sources WHERE id = $1",
-		id).Scan(&src.ID, &src.Type, &src.URL, &src.Name, &channelID, &playlistID, &src.Enabled, &schedule, &lastProcessed, &createdAt, &updatedAt)
+		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, auth_email, auth_session_cookie, auth_last_refreshed, created_at, updated_at FROM youtube_sources WHERE id = $1",
+		id).Scan(&src.ID, &src.Type, &src.URL, &src.Name, &channelID, &playlistID, &src.Enabled, &schedule, &lastProcessed, &authEmail, &authSessionCookie, &authLastRefreshed, &createdAt, &updatedAt)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -614,7 +621,14 @@ func (s *PostgresStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, 
 	if schedule.Valid {
 		src.Schedule = schedule.String
 	}
+	if authEmail.Valid {
+		src.AuthEmail = authEmail.String
+	}
+	if authSessionCookie.Valid {
+		src.AuthSessionCookie = authSessionCookie.String
+	}
 	src.LastProcessed = parseTimestamp(lastProcessed)
+	src.AuthLastRefreshed = parseTimestamp(authLastRefreshed)
 
 	return &src, true
 }
@@ -623,17 +637,23 @@ func (s *PostgresStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, 
 func (s *PostgresStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
 	ctx, cancel := s.getContext()
 	defer cancel()
-	var lastProcessed interface{}
+	var lastProcessed, authLastRefreshed interface{}
 	if source.LastProcessed != "" {
 		t, err := time.Parse(time.RFC3339, source.LastProcessed)
 		if err == nil {
 			lastProcessed = t
 		}
 	}
+	if source.AuthLastRefreshed != "" {
+		t, err := time.Parse(time.RFC3339, source.AuthLastRefreshed)
+		if err == nil {
+			authLastRefreshed = t
+		}
+	}
 
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO youtube_sources (id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`INSERT INTO youtube_sources (id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, auth_email, auth_session_cookie, auth_last_refreshed, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
 		 type = EXCLUDED.type,
 		 url = EXCLUDED.url,
@@ -643,8 +663,11 @@ func (s *PostgresStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource
 		 enabled = EXCLUDED.enabled,
 		 schedule = EXCLUDED.schedule,
 		 last_processed = EXCLUDED.last_processed,
+		 auth_email = EXCLUDED.auth_email,
+		 auth_session_cookie = EXCLUDED.auth_session_cookie,
+		 auth_last_refreshed = EXCLUDED.auth_last_refreshed,
 		 updated_at = CURRENT_TIMESTAMP`,
-		source.ID, source.Type, source.URL, source.Name, source.ChannelID, source.PlaylistID, source.Enabled, source.Schedule, lastProcessed)
+		source.ID, source.Type, source.URL, source.Name, source.ChannelID, source.PlaylistID, source.Enabled, source.Schedule, lastProcessed, source.AuthEmail, source.AuthSessionCookie, authLastRefreshed)
 
 	if err != nil {
 		log.Printf("Failed to create/update YouTube source %s: %v", source.ID, err)

@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS youtube_sources (
     enabled BOOLEAN DEFAULT true,
     schedule VARCHAR(255),
     last_processed TIMESTAMP,
+    auth_email VARCHAR(255),
+    auth_session_cookie TEXT,
+    auth_last_refreshed TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

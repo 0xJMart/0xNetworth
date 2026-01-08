@@ -226,6 +226,9 @@ func main() {
 		api.DELETE("/workflow/sources/:id", workflowHandler.DeleteYouTubeSource)
 		api.POST("/workflow/sources/:id/schedule", workflowHandler.UpdateSourceSchedule)
 		api.POST("/workflow/sources/test", workflowHandler.TestYouTubeSource)
+		api.POST("/workflow/sources/:id/test-scraper", workflowHandler.TestWebScraperSource)
+		api.POST("/workflow/sources/:id/refresh-auth", workflowHandler.RefreshWebScraperAuth)
+		api.GET("/workflow/sources/:id/auth-status", workflowHandler.GetWebScraperAuthStatus)
 		api.POST("/workflow/sources/trigger-all", workflowHandler.TriggerAllSources)
 	}
 
