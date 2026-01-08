@@ -182,7 +182,6 @@ export interface RecommendationsSummary {
   average_confidence: number;
   condition_distribution: Record<string, number>;
   recent_recommendations: RecommendationSummaryItem[];
-  aggregated_summary?: string; // Summary from most recent 10 videos (legacy)
   aggregated_recommendation?: AggregatedRecommendation; // AI-generated consolidated recommendation
 }
 

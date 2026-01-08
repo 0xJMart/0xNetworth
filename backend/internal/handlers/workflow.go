@@ -385,7 +385,6 @@ type RecommendationsSummary struct {
 	AverageConfidence    float64            `json:"average_confidence"`
 	ConditionDistribution map[string]int    `json:"condition_distribution"`
 	RecentRecommendations []RecommendationSummaryItem `json:"recent_recommendations"`
-	AggregatedSummary    string             `json:"aggregated_summary"` // Summary from most recent 10 videos (deprecated, use aggregated_recommendation)
 	AggregatedRecommendation *AggregatedRecommendationResponse `json:"aggregated_recommendation,omitempty"` // AI-generated consolidated recommendation
 }
 
@@ -532,9 +531,6 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 		summary.AverageConfidence = totalConfidence / float64(validConfidenceCount)
 	}
 	
-	// Generate aggregated summary from most recent 10 videos (legacy text-based)
-	summary.AggregatedSummary = h.generateAggregatedSummary(allCompletedExecutions)
-	
 	// Get cached aggregated recommendation if it exists (don't auto-generate)
 	cachedRec, exists := h.store.GetLatestAggregatedRecommendation()
 	if exists {
@@ -673,180 +669,6 @@ func (h *WorkflowHandler) generateAggregatedRecommendation(executions []*models.
 		Summary:          aggregatedRec.Summary,
 		KeyInsights:      aggregatedRec.KeyInsights,
 	}, nil
-}
-
-// generateAggregatedSummary creates a single consolidated summary from the most recent 10 completed workflow executions
-func (h *WorkflowHandler) generateAggregatedSummary(executions []*models.WorkflowExecution) string {
-	if len(executions) == 0 {
-		return "No workflow executions available for analysis."
-	}
-	
-	// Sort by completed_at (newest first)
-	sort.Slice(executions, func(i, j int) bool {
-		if executions[i].CompletedAt == "" || executions[j].CompletedAt == "" {
-			return false
-		}
-		return executions[i].CompletedAt > executions[j].CompletedAt
-	})
-	
-	// Take the most recent 10
-	limit := 10
-	if len(executions) < limit {
-		limit = len(executions)
-	}
-	recentExecutions := executions[:limit]
-	
-	// Collect data from market analyses and recommendations
-	conditions := make(map[string]int)
-	allTrends := make([]string, 0)
-	allRiskFactors := make([]string, 0)
-	allSuggestedActions := make(map[string][]string) // action type -> list of symbols/rationales
-	videoCount := 0
-	
-	for _, exec := range recentExecutions {
-		if exec.AnalysisID == "" {
-			continue
-		}
-		
-		analysis, exists := h.store.GetMarketAnalysisByID(exec.AnalysisID)
-		if !exists {
-			continue
-		}
-		
-		videoCount++
-		
-		// Track conditions
-		if analysis.Conditions != "" {
-			conditions[strings.ToLower(analysis.Conditions)]++
-		}
-		
-		// Collect trends
-		allTrends = append(allTrends, analysis.Trends...)
-		
-		// Collect risk factors
-		allRiskFactors = append(allRiskFactors, analysis.RiskFactors...)
-		
-		// Get recommendations and suggested actions
-		if exec.RecommendationID != "" {
-			rec, exists := h.store.GetRecommendationByID(exec.RecommendationID)
-			if exists {
-				for _, action := range rec.SuggestedActions {
-					key := fmt.Sprintf("%s:%s", action.Type, action.Symbol)
-					if _, ok := allSuggestedActions[key]; !ok {
-						allSuggestedActions[key] = make([]string, 0)
-					}
-					if action.Rationale != "" {
-						allSuggestedActions[key] = append(allSuggestedActions[key], action.Rationale)
-					}
-				}
-			}
-		}
-	}
-	
-	if videoCount == 0 {
-		return fmt.Sprintf("Based on the most recent %d video(s) analyzed, no detailed market analysis data is available yet.", limit)
-	}
-	
-	// Build consolidated summary
-	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("Based on analysis of the most recent %d video(s), here's a consolidated market outlook:\n\n", videoCount))
-	
-	// Determine overall market condition
-	overallCondition := "neutral"
-	maxConditionCount := 0
-	for cond, count := range conditions {
-		if count > maxConditionCount {
-			maxConditionCount = count
-			overallCondition = cond
-		}
-	}
-	
-	summary.WriteString(fmt.Sprintf("**Market Sentiment:** %s (based on %d of %d analyses)\n\n", 
-		strings.Title(overallCondition), maxConditionCount, videoCount))
-	
-	// Aggregate trends (remove duplicates, show most common)
-	trendCounts := make(map[string]int)
-	for _, trend := range allTrends {
-		if trend != "" {
-			trendCounts[trend]++
-		}
-	}
-	if len(trendCounts) > 0 {
-		summary.WriteString("**Key Trends:**\n")
-		// Sort by frequency and take top 5
-		type trendItem struct {
-			trend string
-			count int
-		}
-		trendList := make([]trendItem, 0, len(trendCounts))
-		for trend, count := range trendCounts {
-			trendList = append(trendList, trendItem{trend, count})
-		}
-		sort.Slice(trendList, func(i, j int) bool {
-			return trendList[i].count > trendList[j].count
-		})
-		for i, item := range trendList {
-			if i >= 5 {
-				break
-			}
-			summary.WriteString(fmt.Sprintf("• %s\n", item.trend))
-		}
-		summary.WriteString("\n")
-	}
-	
-	// Aggregate risk factors (remove duplicates, show most common)
-	riskCounts := make(map[string]int)
-	for _, risk := range allRiskFactors {
-		if risk != "" {
-			riskCounts[risk]++
-		}
-	}
-	if len(riskCounts) > 0 {
-		summary.WriteString("**Risk Factors:**\n")
-		// Sort by frequency and take top 5
-		type riskItem struct {
-			risk  string
-			count int
-		}
-		riskList := make([]riskItem, 0, len(riskCounts))
-		for risk, count := range riskCounts {
-			riskList = append(riskList, riskItem{risk, count})
-		}
-		sort.Slice(riskList, func(i, j int) bool {
-			return riskList[i].count > riskList[j].count
-		})
-		for i, item := range riskList {
-			if i >= 5 {
-				break
-			}
-			summary.WriteString(fmt.Sprintf("• %s\n", item.risk))
-		}
-		summary.WriteString("\n")
-	}
-	
-	// Aggregate actionable recommendations
-	if len(allSuggestedActions) > 0 {
-		summary.WriteString("**Actionable Recommendations:**\n")
-		actionCount := 0
-		for key, rationales := range allSuggestedActions {
-			if actionCount >= 5 {
-				break
-			}
-			parts := strings.Split(key, ":")
-			if len(parts) == 2 {
-				actionType := strings.Title(parts[0])
-				symbol := strings.ToUpper(parts[1])
-				summary.WriteString(fmt.Sprintf("• **%s %s**", actionType, symbol))
-				if len(rationales) > 0 && rationales[0] != "" {
-					summary.WriteString(fmt.Sprintf(": %s", rationales[0]))
-				}
-				summary.WriteString("\n")
-				actionCount++
-			}
-		}
-	}
-	
-	return summary.String()
 }
 
 // min returns the minimum of two integers
