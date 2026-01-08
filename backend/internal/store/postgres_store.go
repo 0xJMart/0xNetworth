@@ -698,10 +698,11 @@ func (s *PostgresStore) GetTranscriptByID(id string) (*models.VideoTranscript, b
 	var t models.VideoTranscript
 	var duration sql.NullInt64
 	var sourceID sql.NullString
+	var createdAt sql.NullTime
 
 	err := s.pool.QueryRow(ctx,
 		"SELECT id, video_id, video_title, video_url, text, duration, source_id, created_at FROM video_transcripts WHERE id = $1",
-		id).Scan(&t.ID, &t.VideoID, &t.VideoTitle, &t.VideoURL, &t.Text, &duration, &sourceID, &t.CreatedAt)
+		id).Scan(&t.ID, &t.VideoID, &t.VideoTitle, &t.VideoURL, &t.Text, &duration, &sourceID, &createdAt)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -714,6 +715,7 @@ func (s *PostgresStore) GetTranscriptByID(id string) (*models.VideoTranscript, b
 	if sourceID.Valid {
 		t.SourceID = sourceID.String
 	}
+	t.CreatedAt = parseTimestamp(createdAt)
 
 	return &t, true
 }
@@ -736,9 +738,11 @@ func (s *PostgresStore) GetTranscriptsByVideoID(videoID string) []*models.VideoT
 		var t models.VideoTranscript
 		var duration sql.NullInt64
 		var sourceID sql.NullString
+		var createdAt sql.NullTime
 
-		err := rows.Scan(&t.ID, &t.VideoID, &t.VideoTitle, &t.VideoURL, &t.Text, &duration, &sourceID, &t.CreatedAt)
+		err := rows.Scan(&t.ID, &t.VideoID, &t.VideoTitle, &t.VideoURL, &t.Text, &duration, &sourceID, &createdAt)
 		if err != nil {
+			log.Printf("Failed to scan transcript row: %v", err)
 			continue
 		}
 
@@ -746,6 +750,7 @@ func (s *PostgresStore) GetTranscriptsByVideoID(videoID string) []*models.VideoT
 		if sourceID.Valid {
 			t.SourceID = sourceID.String
 		}
+		t.CreatedAt = parseTimestamp(createdAt)
 
 		transcripts = append(transcripts, &t)
 	}
@@ -792,10 +797,11 @@ func (s *PostgresStore) GetMarketAnalysisByID(id string) (*models.MarketAnalysis
 	defer cancel()
 	var a models.MarketAnalysis
 	var trendsJSON, riskFactorsJSON []byte
+	var createdAt sql.NullTime
 
 	err := s.pool.QueryRow(ctx,
 		"SELECT id, transcript_id, conditions, trends, risk_factors, summary, created_at FROM market_analyses WHERE id = $1",
-		id).Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &a.CreatedAt)
+		id).Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &createdAt)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -812,6 +818,7 @@ func (s *PostgresStore) GetMarketAnalysisByID(id string) (*models.MarketAnalysis
 		log.Printf("Failed to unmarshal risk factors for analysis %s: %v", id, err)
 		a.RiskFactors = []string{}
 	}
+	a.CreatedAt = parseTimestamp(createdAt)
 
 	return &a, true
 }
@@ -833,8 +840,9 @@ func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*
 	for rows.Next() {
 		var a models.MarketAnalysis
 		var trendsJSON, riskFactorsJSON []byte
+		var createdAt sql.NullTime
 
-		err := rows.Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &a.CreatedAt)
+		err := rows.Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &createdAt)
 		if err != nil {
 			log.Printf("Failed to scan market analysis row: %v", err)
 			continue
@@ -848,6 +856,7 @@ func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*
 			log.Printf("Failed to unmarshal risk factors for analysis %s: %v", a.ID, err)
 			a.RiskFactors = []string{}
 		}
+		a.CreatedAt = parseTimestamp(createdAt)
 
 		analyses = append(analyses, &a)
 	}
@@ -890,10 +899,11 @@ func (s *PostgresStore) GetRecommendationByID(id string) (*models.Recommendation
 	var r models.Recommendation
 	var suggestedActionsJSON []byte
 	var summary sql.NullString
+	var createdAt sql.NullTime
 
 	err := s.pool.QueryRow(ctx,
 		"SELECT id, analysis_id, action, confidence, suggested_actions, summary, created_at FROM recommendations WHERE id = $1",
-		id).Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &r.CreatedAt)
+		id).Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &createdAt)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -909,6 +919,7 @@ func (s *PostgresStore) GetRecommendationByID(id string) (*models.Recommendation
 	if summary.Valid {
 		r.Summary = summary.String
 	}
+	r.CreatedAt = parseTimestamp(createdAt)
 
 	return &r, true
 }
@@ -931,8 +942,9 @@ func (s *PostgresStore) GetRecommendationsByAnalysisID(analysisID string) []*mod
 		var r models.Recommendation
 		var suggestedActionsJSON []byte
 		var summary sql.NullString
+		var createdAt sql.NullTime
 
-		err := rows.Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &r.CreatedAt)
+		err := rows.Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &createdAt)
 		if err != nil {
 			log.Printf("Failed to scan recommendation row: %v", err)
 			continue
@@ -945,6 +957,7 @@ func (s *PostgresStore) GetRecommendationsByAnalysisID(analysisID string) []*mod
 		if summary.Valid {
 			r.Summary = summary.String
 		}
+		r.CreatedAt = parseTimestamp(createdAt)
 
 		recommendations = append(recommendations, &r)
 	}
