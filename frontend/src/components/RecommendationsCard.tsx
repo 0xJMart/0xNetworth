@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getRecommendationsSummary, generateAggregatedRecommendation, RecommendationsSummary, type AggregatedRecommendation } from '../api';
+import { getRecommendationsSummary, generateAggregatedRecommendation, RecommendationsSummary } from '../api';
 
 export default function RecommendationsCard() {
   const [summary, setSummary] = useState<RecommendationsSummary | null>(null);
