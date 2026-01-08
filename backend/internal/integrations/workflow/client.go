@@ -72,6 +72,22 @@ type Recommendation struct {
 	Summary          string           `json:"summary,omitempty"`
 }
 
+// AggregatedRecommendationRequest represents the request for aggregated recommendations
+type AggregatedRecommendationRequest struct {
+	MarketAnalyses  []MarketAnalysis `json:"market_analyses"`
+	Recommendations []Recommendation  `json:"recommendations"`
+	PortfolioContext *PortfolioContext `json:"portfolio_context,omitempty"`
+}
+
+// AggregatedRecommendation represents consolidated recommendation from multiple videos
+type AggregatedRecommendation struct {
+	Action           string           `json:"action"`
+	Confidence       float64          `json:"confidence"`
+	SuggestedActions []SuggestedAction `json:"suggested_actions"`
+	Summary          string           `json:"summary"`
+	KeyInsights      []string         `json:"key_insights"`
+}
+
 // APIError represents an error from the workflow service
 type APIError struct {
 	StatusCode int
@@ -168,6 +184,55 @@ func (c *Client) HealthCheck() error {
 	}
 	
 	return nil
+}
+
+// GenerateAggregatedRecommendation generates a consolidated recommendation from multiple video analyses
+func (c *Client) GenerateAggregatedRecommendation(request AggregatedRecommendationRequest) (*AggregatedRecommendation, error) {
+	url := c.baseURL + "/aggregate"
+	
+	// Serialize request
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	
+	// Create HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	
+	// Execute request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	// Read response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+		}
+	}
+	
+	// Parse response
+	var response AggregatedRecommendation
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	
+	return &response, nil
 }
 
 

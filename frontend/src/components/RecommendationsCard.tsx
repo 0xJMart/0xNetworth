@@ -138,8 +138,62 @@ export default function RecommendationsCard() {
         </div>
       </div>
 
-      {/* Aggregated Summary - Most Prominent */}
-      {summary.aggregated_summary && (
+      {/* AI-Generated Aggregated Recommendation - Most Prominent */}
+      {summary.aggregated_recommendation && (
+        <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-r-lg shadow-md">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">AI-Generated Consolidated Recommendation</h3>
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getConfidenceColor(summary.aggregated_recommendation.confidence)} bg-white`}>
+              {(summary.aggregated_recommendation.confidence * 100).toFixed(0)}% Confidence
+            </span>
+          </div>
+          
+          <div className="mb-4">
+            <div className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-lg capitalize">
+              {summary.aggregated_recommendation.action}
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+              {summary.aggregated_recommendation.summary}
+            </p>
+          </div>
+          
+          {summary.aggregated_recommendation.key_insights && summary.aggregated_recommendation.key_insights.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Key Insights:</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                {summary.aggregated_recommendation.key_insights.map((insight, idx) => (
+                  <li key={idx}>{insight}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {summary.aggregated_recommendation.suggested_actions && summary.aggregated_recommendation.suggested_actions.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Actionable Steps:</h4>
+              <div className="space-y-2">
+                {summary.aggregated_recommendation.suggested_actions.map((action, idx) => (
+                  <div key={idx} className="p-3 bg-white rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold capitalize">
+                        {action.type}
+                      </span>
+                      <span className="font-semibold text-gray-900">{action.symbol}</span>
+                    </div>
+                    <p className="text-sm text-gray-700">{action.rationale}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Legacy Aggregated Summary (fallback if AI recommendation not available) */}
+      {!summary.aggregated_recommendation && summary.aggregated_summary && (
         <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">Consolidated Market Analysis</h3>
           <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed space-y-2">

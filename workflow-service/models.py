@@ -54,6 +54,22 @@ class Recommendation(BaseModel):
     summary: Optional[str] = Field(None, description="Recommendation summary")
 
 
+class AggregatedRecommendation(BaseModel):
+    """Aggregated recommendation from multiple video analyses."""
+    action: str = Field(..., description="Overall consolidated recommended action")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence level based on consensus (0.0 to 1.0)")
+    suggested_actions: List[SuggestedAction] = Field(default_factory=list, description="Specific suggested actions")
+    summary: str = Field(..., description="Detailed consolidated recommendation summary")
+    key_insights: List[str] = Field(default_factory=list, description="Key insights from aggregated analysis")
+
+
+class AggregatedRecommendationRequest(BaseModel):
+    """Request model for aggregated recommendation generation."""
+    market_analyses: List[MarketAnalysis] = Field(..., description="List of market analyses from recent videos")
+    recommendations: List[Recommendation] = Field(..., description="List of recommendations from recent videos")
+    portfolio_context: Optional[PortfolioContext] = Field(None, description="Current portfolio context")
+
+
 class WorkflowResponse(BaseModel):
     """Response model for workflow execution."""
     transcript: Transcript = Field(..., description="Video transcript data")

@@ -16,8 +16,8 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic_ai.exceptions import AgentRunError
 
-from models import WorkflowRequest, WorkflowResponse
-from agents import extract_transcript, analyze_market, generate_recommendation
+from models import WorkflowRequest, WorkflowResponse, AggregatedRecommendationRequest, AggregatedRecommendation
+from agents import extract_transcript, analyze_market, generate_recommendation, generate_aggregated_recommendation
 from tools.youtube_tool import extract_video_id, fetch_transcript
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
@@ -369,6 +369,77 @@ async def process_video(request: Request, workflow_request: WorkflowRequest) -> 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process video: {str(e)}"
+        )
+
+
+@app.post("/aggregate", response_model=AggregatedRecommendation)
+@limiter.limit("5/minute")  # Rate limit: 5 requests per minute per IP
+async def aggregate_recommendations(request: Request, aggregated_request: AggregatedRecommendationRequest) -> AggregatedRecommendation:
+    """Generate consolidated investment recommendation from multiple video analyses.
+    
+    This endpoint processes the last 10 videos' market analyses and recommendations
+    to provide an overall actionable recommendation based on consensus and patterns.
+    
+    Args:
+        request: FastAPI request object (for rate limiting)
+        aggregated_request: AggregatedRecommendationRequest with market analyses and recommendations
+        
+    Returns:
+        AggregatedRecommendation with consolidated action, confidence, and insights
+        
+    Raises:
+        HTTPException: If the aggregation fails
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    logger.info(f"[{request_id}] Generating aggregated recommendation from {len(aggregated_request.market_analyses)} analyses")
+    
+    try:
+        # Validate input
+        if not aggregated_request.market_analyses or not aggregated_request.recommendations:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Both market_analyses and recommendations lists must be non-empty"
+            )
+        
+        if len(aggregated_request.market_analyses) != len(aggregated_request.recommendations):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="market_analyses and recommendations must have the same length"
+            )
+        
+        # Generate aggregated recommendation
+        logger.info(f"[{request_id}] Processing {len(aggregated_request.market_analyses)} video analyses...")
+        try:
+            aggregated_rec = await generate_aggregated_recommendation(
+                market_analyses=aggregated_request.market_analyses,
+                recommendations=aggregated_request.recommendations,
+                portfolio_context=aggregated_request.portfolio_context
+            )
+            logger.info(f"[{request_id}] Aggregated recommendation generated: {aggregated_rec.action} (confidence: {aggregated_rec.confidence})")
+        except AgentRunError as e:
+            logger.error(f"[{request_id}] Agent error during aggregated recommendation generation: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"AI agent error during aggregated recommendation generation: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"[{request_id}] Unexpected error during aggregated recommendation generation: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Unexpected error during aggregated recommendation generation: {str(e)}"
+            )
+        
+        return aggregated_rec
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (already properly formatted)
+        raise
+    except Exception as e:
+        # Catch-all for any other unexpected errors
+        logger.error(f"[{request_id}] Unexpected error processing aggregated recommendation: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process aggregated recommendation: {str(e)}"
         )
 
 

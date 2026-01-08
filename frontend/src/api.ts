@@ -162,13 +162,28 @@ export async function getWorkflowExecutionDetails(id: string): Promise<WorkflowE
 }
 
 // Recommendations Summary API
+export interface SuggestedAction {
+  type: string;
+  symbol: string;
+  rationale: string;
+}
+
+export interface AggregatedRecommendation {
+  action: string;
+  confidence: number;
+  suggested_actions: SuggestedAction[];
+  summary: string;
+  key_insights: string[];
+}
+
 export interface RecommendationsSummary {
   total_count: number;
   action_distribution: Record<string, number>;
   average_confidence: number;
   condition_distribution: Record<string, number>;
   recent_recommendations: RecommendationSummaryItem[];
-  aggregated_summary?: string; // Summary from most recent 10 videos
+  aggregated_summary?: string; // Summary from most recent 10 videos (legacy)
+  aggregated_recommendation?: AggregatedRecommendation; // AI-generated consolidated recommendation
 }
 
 export interface RecommendationSummaryItem {

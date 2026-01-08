@@ -385,7 +385,24 @@ type RecommendationsSummary struct {
 	AverageConfidence    float64            `json:"average_confidence"`
 	ConditionDistribution map[string]int    `json:"condition_distribution"`
 	RecentRecommendations []RecommendationSummaryItem `json:"recent_recommendations"`
-	AggregatedSummary    string             `json:"aggregated_summary"` // Summary from most recent 10 videos
+	AggregatedSummary    string             `json:"aggregated_summary"` // Summary from most recent 10 videos (deprecated, use aggregated_recommendation)
+	AggregatedRecommendation *AggregatedRecommendationResponse `json:"aggregated_recommendation,omitempty"` // AI-generated consolidated recommendation
+}
+
+// AggregatedRecommendationResponse represents the response from the aggregated recommendation agent
+type AggregatedRecommendationResponse struct {
+	Action           string           `json:"action"`
+	Confidence       float64          `json:"confidence"`
+	SuggestedActions []SuggestedActionResponse `json:"suggested_actions"`
+	Summary          string           `json:"summary"`
+	KeyInsights      []string         `json:"key_insights"`
+}
+
+// SuggestedActionResponse represents a suggested action in the aggregated recommendation
+type SuggestedActionResponse struct {
+	Type      string `json:"type"`
+	Symbol    string `json:"symbol"`
+	Rationale string `json:"rationale"`
 }
 
 // RecommendationSummaryItem represents a single recommendation in the summary
@@ -515,8 +532,17 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 		summary.AverageConfidence = totalConfidence / float64(validConfidenceCount)
 	}
 	
-	// Generate aggregated summary from most recent 10 videos
+	// Generate aggregated summary from most recent 10 videos (legacy text-based)
 	summary.AggregatedSummary = h.generateAggregatedSummary(allCompletedExecutions)
+	
+	// Generate AI-powered aggregated recommendation from most recent 10 videos
+	aggregatedRec, err := h.generateAggregatedRecommendation(allCompletedExecutions)
+	if err != nil {
+		log.Printf("Failed to generate aggregated recommendation: %v", err)
+		// Don't fail the request, just log the error
+	} else {
+		summary.AggregatedRecommendation = aggregatedRec
+	}
 	
 	c.JSON(http.StatusOK, summary)
 }
@@ -701,6 +727,55 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// generateAggregatedRecommendation creates an AI-powered consolidated recommendation from the most recent 10 completed workflow executions
+func (h *WorkflowHandler) generateAggregatedRecommendation(executions []*models.WorkflowExecution) (*AggregatedRecommendationResponse, error) {
+	if len(executions) == 0 {
+		return nil, fmt.Errorf("no workflow executions provided")
+	}
+	
+	// Sort by completed_at (newest first)
+	sort.Slice(executions, func(i, j int) bool {
+		if executions[i].CompletedAt == "" || executions[j].CompletedAt == "" {
+			return false
+		}
+		return executions[i].CompletedAt > executions[j].CompletedAt
+	})
+	
+	// Take the most recent 10
+	limit := 10
+	if len(executions) < limit {
+		limit = len(executions)
+	}
+	recentExecutions := executions[:limit]
+	
+	// Build portfolio context
+	portfolioContext := h.engine.BuildPortfolioContext()
+	
+	// Call engine to generate aggregated recommendation
+	aggregatedRec, err := h.engine.GenerateAggregatedRecommendation(recentExecutions, portfolioContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate aggregated recommendation: %w", err)
+	}
+	
+	// Convert to response format
+	suggestedActions := make([]SuggestedActionResponse, len(aggregatedRec.SuggestedActions))
+	for i, sa := range aggregatedRec.SuggestedActions {
+		suggestedActions[i] = SuggestedActionResponse{
+			Type:      sa.Type,
+			Symbol:    sa.Symbol,
+			Rationale: sa.Rationale,
+		}
+	}
+	
+	return &AggregatedRecommendationResponse{
+		Action:           aggregatedRec.Action,
+		Confidence:       aggregatedRec.Confidence,
+		SuggestedActions: suggestedActions,
+		Summary:          aggregatedRec.Summary,
+		KeyInsights:      aggregatedRec.KeyInsights,
+	}, nil
 }
 
 

@@ -58,7 +58,7 @@ func (e *Engine) ExecuteWorkflow(videoURL string, sourceID string) (*models.Work
 	log.Printf("Starting workflow execution %s for video: %s", executionID, videoURL)
 
 	// Build portfolio context from current investments
-	portfolioContext := e.buildPortfolioContext()
+	portfolioContext := e.BuildPortfolioContext()
 
 	// Call Python workflow service
 	request := workflowclient.WorkflowRequest{
@@ -138,8 +138,8 @@ func (e *Engine) ExecuteWorkflow(videoURL string, sourceID string) (*models.Work
 	return execution, nil
 }
 
-// buildPortfolioContext builds portfolio context from current investments
-func (e *Engine) buildPortfolioContext() *workflowclient.PortfolioContext {
+// BuildPortfolioContext builds portfolio context from current investments
+func (e *Engine) BuildPortfolioContext() *workflowclient.PortfolioContext {
 	investments := e.store.GetAllInvestments()
 	
 	if len(investments) == 0 {
@@ -194,5 +194,73 @@ func extractVideoIDFromURL(url string) string {
 	}
 	
 	return ""
+}
+
+// GenerateAggregatedRecommendation generates a consolidated recommendation from the last 10 videos
+func (e *Engine) GenerateAggregatedRecommendation(executions []*models.WorkflowExecution, portfolioContext *workflowclient.PortfolioContext) (*workflowclient.AggregatedRecommendation, error) {
+	if len(executions) == 0 {
+		return nil, fmt.Errorf("no workflow executions provided")
+	}
+	
+	// Collect market analyses and recommendations
+	marketAnalyses := make([]workflowclient.MarketAnalysis, 0)
+	recommendations := make([]workflowclient.Recommendation, 0)
+	
+	for _, exec := range executions {
+		// Get market analysis
+		if exec.AnalysisID != "" {
+			analysis, exists := e.store.GetMarketAnalysisByID(exec.AnalysisID)
+			if exists {
+				marketAnalyses = append(marketAnalyses, workflowclient.MarketAnalysis{
+					Conditions:  analysis.Conditions,
+					Trends:      analysis.Trends,
+					RiskFactors: analysis.RiskFactors,
+					Summary:     analysis.Summary,
+				})
+			}
+		}
+		
+		// Get recommendation
+		if exec.RecommendationID != "" {
+			rec, exists := e.store.GetRecommendationByID(exec.RecommendationID)
+			if exists {
+				suggestedActions := make([]workflowclient.SuggestedAction, len(rec.SuggestedActions))
+				for i, sa := range rec.SuggestedActions {
+					suggestedActions[i] = workflowclient.SuggestedAction{
+						Type:      sa.Type,
+						Symbol:    sa.Symbol,
+						Rationale: sa.Rationale,
+					}
+				}
+				recommendations = append(recommendations, workflowclient.Recommendation{
+					Action:           rec.Action,
+					Confidence:       rec.Confidence,
+					SuggestedActions: suggestedActions,
+					Summary:          rec.Summary,
+				})
+			}
+		}
+	}
+	
+	if len(marketAnalyses) == 0 || len(recommendations) == 0 {
+		return nil, fmt.Errorf("insufficient data: need at least one market analysis and recommendation")
+	}
+	
+	// Ensure both lists have the same length (they should be paired)
+	minLen := len(marketAnalyses)
+	if len(recommendations) < minLen {
+		minLen = len(recommendations)
+	}
+	marketAnalyses = marketAnalyses[:minLen]
+	recommendations = recommendations[:minLen]
+	
+	// Call workflow service
+	request := workflowclient.AggregatedRecommendationRequest{
+		MarketAnalyses:  marketAnalyses,
+		Recommendations: recommendations,
+		PortfolioContext: portfolioContext,
+	}
+	
+	return e.workflowClient.GenerateAggregatedRecommendation(request)
 }
 
