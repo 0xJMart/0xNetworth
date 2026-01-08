@@ -112,6 +112,15 @@ func (h *WorkflowHandler) CreateYouTubeSource(c *gin.Context) {
 	}
 
 	h.store.CreateOrUpdateYouTubeSource(source)
+	
+	// Schedule the source if it's enabled
+	if h.scheduler != nil && source.Enabled {
+		if err := h.scheduler.ReloadSourceSchedule(source.ID); err != nil {
+			log.Printf("Failed to schedule newly created source %s: %v", source.ID, err)
+			// Don't fail the request, just log the error
+		}
+	}
+	
 	c.JSON(http.StatusCreated, source)
 }
 
@@ -170,6 +179,14 @@ func (h *WorkflowHandler) UpdateSourceSchedule(c *gin.Context) {
 	source.Schedule = req.Schedule
 	h.store.CreateOrUpdateYouTubeSource(source)
 
+	// Reload the schedule in the scheduler
+	if h.scheduler != nil {
+		if err := h.scheduler.ReloadSourceSchedule(id); err != nil {
+			log.Printf("Failed to reload schedule for source %s: %v", id, err)
+			// Don't fail the request, just log the error
+		}
+	}
+
 	c.JSON(http.StatusOK, source)
 }
 
@@ -199,6 +216,15 @@ func (h *WorkflowHandler) UpdateYouTubeSource(c *gin.Context) {
 	}
 
 	h.store.CreateOrUpdateYouTubeSource(source)
+	
+	// Reload the schedule in the scheduler if schedule or enabled status changed
+	if h.scheduler != nil && (req.Schedule != "" || req.Enabled != source.Enabled) {
+		if err := h.scheduler.ReloadSourceSchedule(id); err != nil {
+			log.Printf("Failed to reload schedule for source %s: %v", id, err)
+			// Don't fail the request, just log the error
+		}
+	}
+	
 	c.JSON(http.StatusOK, source)
 }
 

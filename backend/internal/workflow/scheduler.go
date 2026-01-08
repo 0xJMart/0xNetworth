@@ -21,6 +21,7 @@ type Scheduler struct {
 	cron        *cron.Cron
 	enabled     bool
 	youtubeClient *youtube.Client
+	jobEntries  map[string]cron.EntryID // Maps source ID to cron entry ID
 }
 
 // NewScheduler creates a new workflow scheduler
@@ -46,6 +47,7 @@ func NewScheduler(store store.Store, engine *Engine) *Scheduler {
 		cron:         cron.New(),
 		enabled:      enabled == "true",
 		youtubeClient: youtubeClient,
+		jobEntries:   make(map[string]cron.EntryID),
 	}
 	
 	if s.enabled {
@@ -101,7 +103,7 @@ func (s *Scheduler) setupSchedules() {
 		sourceID := source.ID
 		sourceURL := source.URL
 		
-		_, err := s.cron.AddFunc(schedule, func() {
+		entryID, err := s.cron.AddFunc(schedule, func() {
 			log.Printf("Scheduled execution triggered for source: %s (%s)", source.Name, sourceID)
 			s.executeSource(sourceID, sourceURL)
 		})
@@ -111,6 +113,7 @@ func (s *Scheduler) setupSchedules() {
 			continue
 		}
 		
+		s.jobEntries[sourceID] = entryID
 		log.Printf("Scheduled source %s (%s) with schedule: %s", source.Name, sourceID, schedule)
 	}
 }
@@ -334,5 +337,57 @@ type SourceDisabledError struct {
 
 func (e *SourceDisabledError) Error() string {
 	return "source is disabled: " + e.SourceID
+}
+
+// ReloadSourceSchedule reloads the cron schedule for a specific source
+// This should be called when a source's schedule is updated
+func (s *Scheduler) ReloadSourceSchedule(sourceID string) error {
+	if !s.enabled {
+		return fmt.Errorf("scheduler is disabled")
+	}
+	
+	// Remove existing cron job if it exists
+	if entryID, exists := s.jobEntries[sourceID]; exists {
+		s.cron.Remove(entryID)
+		delete(s.jobEntries, sourceID)
+		log.Printf("Removed existing schedule for source %s", sourceID)
+	}
+	
+	// Get the source from store
+	source, exists := s.store.GetYouTubeSourceByID(sourceID)
+	if !exists {
+		return fmt.Errorf("source %s not found", sourceID)
+	}
+	
+	// If source is disabled, don't schedule it
+	if !source.Enabled {
+		log.Printf("Source %s is disabled, not scheduling", sourceID)
+		return nil
+	}
+	
+	// Use source-specific schedule if available, otherwise use default
+	schedule := source.Schedule
+	if schedule == "" {
+		schedule = os.Getenv("WORKFLOW_DEFAULT_SCHEDULE")
+		if schedule == "" {
+			schedule = "0 9 * * *" // Default: daily at 9 AM
+		}
+	}
+	
+	// Create closure to capture source
+	sourceURL := source.URL
+	
+	entryID, err := s.cron.AddFunc(schedule, func() {
+		log.Printf("Scheduled execution triggered for source: %s (%s)", source.Name, sourceID)
+		s.executeSource(sourceID, sourceURL)
+	})
+	
+	if err != nil {
+		return fmt.Errorf("error scheduling source %s: %w", sourceID, err)
+	}
+	
+	s.jobEntries[sourceID] = entryID
+	log.Printf("Reloaded schedule for source %s (%s) with schedule: %s", source.Name, sourceID, schedule)
+	return nil
 }
 
