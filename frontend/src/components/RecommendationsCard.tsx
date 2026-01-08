@@ -140,10 +140,41 @@ export default function RecommendationsCard() {
 
       {/* Aggregated Summary - Most Prominent */}
       {summary.aggregated_summary && (
-        <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Market Analysis Summary</h3>
-          <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
-            {summary.aggregated_summary}
+        <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Consolidated Market Analysis</h3>
+          <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed space-y-2">
+            {summary.aggregated_summary.split('\n').map((line, idx) => {
+              // Handle bold text (**text**)
+              const boldRegex = /\*\*(.*?)\*\*/g;
+              const parts = [];
+              let lastIndex = 0;
+              let match;
+              
+              while ((match = boldRegex.exec(line)) !== null) {
+                if (match.index > lastIndex) {
+                  parts.push({ text: line.substring(lastIndex, match.index), bold: false });
+                }
+                parts.push({ text: match[1], bold: true });
+                lastIndex = match.index + match[0].length;
+              }
+              if (lastIndex < line.length) {
+                parts.push({ text: line.substring(lastIndex), bold: false });
+              }
+              
+              if (parts.length === 0) {
+                parts.push({ text: line, bold: false });
+              }
+              
+              return (
+                <div key={idx} className={line.trim() === '' ? 'h-2' : ''}>
+                  {parts.map((part, partIdx) => (
+                    <span key={partIdx} className={part.bold ? 'font-semibold text-gray-900' : ''}>
+                      {part.text}
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
