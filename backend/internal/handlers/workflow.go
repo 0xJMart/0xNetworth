@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -384,6 +385,7 @@ type RecommendationsSummary struct {
 	AverageConfidence    float64            `json:"average_confidence"`
 	ConditionDistribution map[string]int    `json:"condition_distribution"`
 	RecentRecommendations []RecommendationSummaryItem `json:"recent_recommendations"`
+	AggregatedSummary    string             `json:"aggregated_summary"` // Summary from most recent 10 videos
 }
 
 // RecommendationSummaryItem represents a single recommendation in the summary
@@ -414,6 +416,9 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 	
 	// Filter executions from the past N days with recommendations
 	recentExecutions := make([]*models.WorkflowExecution, 0)
+	// Also collect all completed executions for aggregated summary (regardless of days)
+	allCompletedExecutions := make([]*models.WorkflowExecution, 0)
+	
 	for _, exec := range allExecutions {
 		if exec.Status != models.WorkflowStatusCompleted {
 			continue
@@ -430,6 +435,9 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 			log.Printf("Warning: Invalid CompletedAt timestamp for execution %s: %v", exec.ID, err)
 			continue
 		}
+		
+		// Add to all completed for aggregated summary
+		allCompletedExecutions = append(allCompletedExecutions, exec)
 		
 		if completedAt.After(cutoffTime) {
 			recentExecutions = append(recentExecutions, exec)
@@ -507,7 +515,87 @@ func (h *WorkflowHandler) GetRecommendationsSummary(c *gin.Context) {
 		summary.AverageConfidence = totalConfidence / float64(validConfidenceCount)
 	}
 	
+	// Generate aggregated summary from most recent 10 videos
+	summary.AggregatedSummary = h.generateAggregatedSummary(allCompletedExecutions)
+	
 	c.JSON(http.StatusOK, summary)
+}
+
+// generateAggregatedSummary creates a descriptive summary from the most recent 10 completed workflow executions
+func (h *WorkflowHandler) generateAggregatedSummary(executions []*models.WorkflowExecution) string {
+	if len(executions) == 0 {
+		return "No workflow executions available for analysis."
+	}
+	
+	// Sort by completed_at (newest first)
+	sort.Slice(executions, func(i, j int) bool {
+		if executions[i].CompletedAt == "" || executions[j].CompletedAt == "" {
+			return false
+		}
+		return executions[i].CompletedAt > executions[j].CompletedAt
+	})
+	
+	// Take the most recent 10
+	limit := 10
+	if len(executions) < limit {
+		limit = len(executions)
+	}
+	recentExecutions := executions[:limit]
+	
+	// Collect summaries from market analyses
+	summaries := make([]string, 0)
+	videoTitles := make([]string, 0)
+	
+	for _, exec := range recentExecutions {
+		if exec.AnalysisID == "" {
+			continue
+		}
+		
+		analysis, exists := h.store.GetMarketAnalysisByID(exec.AnalysisID)
+		if !exists || analysis.Summary == "" {
+			continue
+		}
+		
+		summaries = append(summaries, analysis.Summary)
+		if exec.VideoTitle != "" {
+			videoTitles = append(videoTitles, exec.VideoTitle)
+		}
+	}
+	
+	if len(summaries) == 0 {
+		return fmt.Sprintf("Based on the most recent %d video(s) analyzed, no detailed market analysis summaries are available yet.", limit)
+	}
+	
+	// Build aggregated summary
+	var aggregated strings.Builder
+	aggregated.WriteString(fmt.Sprintf("Based on analysis of the most recent %d video(s): ", len(summaries)))
+	
+	if len(videoTitles) > 0 {
+		aggregated.WriteString(fmt.Sprintf("(%s) ", strings.Join(videoTitles[:min(3, len(videoTitles))], ", ")))
+		if len(videoTitles) > 3 {
+			aggregated.WriteString(fmt.Sprintf("and %d more. ", len(videoTitles)-3))
+		}
+	}
+	
+	aggregated.WriteString("\n\n")
+	
+	// Combine summaries with separators
+	for i, summary := range summaries {
+		if i > 0 {
+			aggregated.WriteString("\n\n")
+		}
+		aggregated.WriteString(fmt.Sprintf("• %s", strings.TrimSpace(summary)))
+	}
+	
+	return aggregated.String()
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 

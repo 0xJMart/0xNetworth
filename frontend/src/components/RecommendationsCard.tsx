@@ -138,6 +138,16 @@ export default function RecommendationsCard() {
         </div>
       </div>
 
+      {/* Aggregated Summary - Most Prominent */}
+      {summary.aggregated_summary && (
+        <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Market Analysis Summary</h3>
+          <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+            {summary.aggregated_summary}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div className="bg-gray-50 rounded-lg p-4">
           <p className="text-sm text-gray-600 mb-1">Total Recommendations</p>
