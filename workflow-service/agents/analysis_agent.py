@@ -20,7 +20,7 @@ client = AsyncOpenAI()
 # Initialize the agent with OpenAI model
 # Fixed: Changed result_type to output_type (correct parameter name)
 analysis_agent = Agent(
-    'openai:gpt-4o',
+    'openai:gpt-5.2',
     system_prompt='You are a financial market analyst expert. Analyze video transcripts about cryptocurrency '
                   'and financial markets. Identify market conditions, trends, and risk factors. '
                   'Provide clear, structured analysis of market conditions based on the transcript content. '

@@ -20,7 +20,7 @@ client = AsyncOpenAI()
 # Initialize the agent with OpenAI model
 # Fixed: Changed result_type to output_type (correct parameter name)
 recommendation_agent = Agent(
-    'openai:gpt-4o',
+    'openai:gpt-5.2',
     system_prompt='You are an investment advisor expert. Based on market analysis and portfolio context, '
                   'provide actionable investment recommendations. Consider risk management, diversification, '
                   'and alignment with market conditions. Provide specific, actionable recommendations '

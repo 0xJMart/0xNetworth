@@ -24,7 +24,7 @@ client = AsyncOpenAI()
 
 # Initialize the aggregated recommendation agent
 aggregated_agent = Agent(
-    'openai:gpt-4o',
+    'openai:gpt-5.2',
     system_prompt='You are a senior investment advisor expert. You analyze multiple market analyses and recommendations '
                   'from recent videos to provide a consolidated, actionable investment strategy. Your goal is to '
                   'identify patterns, trends, and consensus across multiple sources to provide the most reliable '
