@@ -138,9 +138,12 @@ func parseIntPtr(i sql.NullInt64) *int {
 
 // GetAllPortfolios returns all portfolios
 func (s *PostgresStore) GetAllPortfolios() []*models.Portfolio {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, platform, name, type, last_synced, created_at, updated_at FROM portfolios ORDER BY created_at DESC")
 	if err != nil {
+		log.Printf("Failed to get all portfolios: %v", err)
 		return []*models.Portfolio{}
 	}
 	defer rows.Close()
@@ -169,10 +172,13 @@ func (s *PostgresStore) GetAllPortfolios() []*models.Portfolio {
 
 // GetPortfoliosByPlatform returns portfolios for a specific platform
 func (s *PostgresStore) GetPortfoliosByPlatform(platform models.Platform) []*models.Portfolio {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, platform, name, type, last_synced, created_at, updated_at FROM portfolios WHERE platform = $1 ORDER BY created_at DESC",
 		platform)
 	if err != nil {
+		log.Printf("Failed to get portfolios by platform %s: %v", platform, err)
 		return []*models.Portfolio{}
 	}
 	defer rows.Close()
@@ -201,15 +207,20 @@ func (s *PostgresStore) GetPortfoliosByPlatform(platform models.Platform) []*mod
 
 // GetPortfolioByID returns a portfolio by ID
 func (s *PostgresStore) GetPortfolioByID(id string) (*models.Portfolio, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var p models.Portfolio
 	var lastSynced, createdAt, updatedAt sql.NullTime
 	var portfolioType sql.NullString
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, platform, name, type, last_synced, created_at, updated_at FROM portfolios WHERE id = $1",
 		id).Scan(&p.ID, &p.Platform, &p.Name, &portfolioType, &lastSynced, &createdAt, &updatedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get portfolio %s: %v", id, err)
+		}
 		return nil, false
 	}
 
@@ -251,8 +262,11 @@ func (s *PostgresStore) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 
 // DeletePortfolio deletes a portfolio by ID
 func (s *PostgresStore) DeletePortfolio(id string) bool {
-	result, err := s.pool.Exec(context.Background(), "DELETE FROM portfolios WHERE id = $1", id)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	result, err := s.pool.Exec(ctx, "DELETE FROM portfolios WHERE id = $1", id)
 	if err != nil {
+		log.Printf("Failed to delete portfolio %s: %v", id, err)
 		return false
 	}
 	return result.RowsAffected() > 0
@@ -262,9 +276,12 @@ func (s *PostgresStore) DeletePortfolio(id string) bool {
 
 // GetAllInvestments returns all investments
 func (s *PostgresStore) GetAllInvestments() []*models.Investment {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, account_id, platform, symbol, name, quantity, value, price, currency, asset_type, last_updated, created_at, updated_at FROM investments ORDER BY created_at DESC")
 	if err != nil {
+		log.Printf("Failed to get all investments: %v", err)
 		return []*models.Investment{}
 	}
 	defer rows.Close()
@@ -296,10 +313,13 @@ func (s *PostgresStore) GetAllInvestments() []*models.Investment {
 
 // GetInvestmentsByAccount returns investments for a specific account
 func (s *PostgresStore) GetInvestmentsByAccount(accountID string) []*models.Investment {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, account_id, platform, symbol, name, quantity, value, price, currency, asset_type, last_updated, created_at, updated_at FROM investments WHERE account_id = $1 ORDER BY created_at DESC",
 		accountID)
 	if err != nil {
+		log.Printf("Failed to get investments by account %s: %v", accountID, err)
 		return []*models.Investment{}
 	}
 	defer rows.Close()
@@ -331,10 +351,13 @@ func (s *PostgresStore) GetInvestmentsByAccount(accountID string) []*models.Inve
 
 // GetInvestmentsByPlatform returns investments for a specific platform
 func (s *PostgresStore) GetInvestmentsByPlatform(platform models.Platform) []*models.Investment {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, account_id, platform, symbol, name, quantity, value, price, currency, asset_type, last_updated, created_at, updated_at FROM investments WHERE platform = $1 ORDER BY created_at DESC",
 		platform)
 	if err != nil {
+		log.Printf("Failed to get investments by platform %s: %v", platform, err)
 		return []*models.Investment{}
 	}
 	defer rows.Close()
@@ -401,8 +424,11 @@ func (s *PostgresStore) CreateOrUpdateInvestment(investment *models.Investment) 
 
 // DeleteInvestment deletes an investment by ID
 func (s *PostgresStore) DeleteInvestment(id string) bool {
-	result, err := s.pool.Exec(context.Background(), "DELETE FROM investments WHERE id = $1", id)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	result, err := s.pool.Exec(ctx, "DELETE FROM investments WHERE id = $1", id)
 	if err != nil {
+		log.Printf("Failed to delete investment %s: %v", id, err)
 		return false
 	}
 	return result.RowsAffected() > 0
@@ -430,11 +456,14 @@ func (s *PostgresStore) RecalculateNetWorth() *models.NetWorth {
 	}
 
 	// Get total value and breakdowns by platform and asset type
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		`SELECT platform, asset_type, SUM(value) as total_value
 		 FROM investments
 		 GROUP BY platform, asset_type`)
 	if err != nil {
+		log.Printf("Failed to calculate net worth: %v", err)
 		return networth
 	}
 	defer rows.Close()
@@ -462,8 +491,10 @@ func (s *PostgresStore) RecalculateNetWorth() *models.NetWorth {
 
 	// Get portfolio count
 	var count int
-	err = s.pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM portfolios").Scan(&count)
-	if err == nil {
+	err = s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM portfolios").Scan(&count)
+	if err != nil {
+		log.Printf("Failed to get portfolio count: %v", err)
+	} else {
 		networth.AccountCount = count
 	}
 
@@ -474,12 +505,21 @@ func (s *PostgresStore) RecalculateNetWorth() *models.NetWorth {
 
 // GetLastSyncTime returns the last sync time
 func (s *PostgresStore) GetLastSyncTime() time.Time {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var lastSync sql.NullTime
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT last_sync_time FROM sync_metadata WHERE platform = $1 ORDER BY updated_at DESC LIMIT 1",
 		models.PlatformCoinbase).Scan(&lastSync)
 
-	if err != nil || !lastSync.Valid {
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get last sync time: %v", err)
+		}
+		return time.Time{}
+	}
+
+	if !lastSync.Valid {
 		return time.Time{}
 	}
 
@@ -488,7 +528,9 @@ func (s *PostgresStore) GetLastSyncTime() time.Time {
 
 // SetLastSyncTime sets the last sync time
 func (s *PostgresStore) SetLastSyncTime(t time.Time) {
-	_, err := s.pool.Exec(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO sync_metadata (id, platform, last_sync_time, sync_status, created_at, updated_at)
 		 VALUES ($1, $2, $3, 'success', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		 ON CONFLICT (platform) DO UPDATE SET
@@ -498,7 +540,7 @@ func (s *PostgresStore) SetLastSyncTime(t time.Time) {
 		fmt.Sprintf("sync-%s", models.PlatformCoinbase), models.PlatformCoinbase, t)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to set last sync time: %v", err)
 	}
 }
 
@@ -506,9 +548,12 @@ func (s *PostgresStore) SetLastSyncTime(t time.Time) {
 
 // GetAllYouTubeSources returns all YouTube sources
 func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at FROM youtube_sources ORDER BY created_at DESC")
 	if err != nil {
+		log.Printf("Failed to get all YouTube sources: %v", err)
 		return []*models.YouTubeSource{}
 	}
 	defer rows.Close()
@@ -543,15 +588,20 @@ func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
 
 // GetYouTubeSourceByID returns a YouTube source by ID
 func (s *PostgresStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var src models.YouTubeSource
 	var channelID, playlistID, schedule sql.NullString
 	var lastProcessed, createdAt, updatedAt sql.NullTime
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at FROM youtube_sources WHERE id = $1",
 		id).Scan(&src.ID, &src.Type, &src.URL, &src.Name, &channelID, &playlistID, &src.Enabled, &schedule, &lastProcessed, &createdAt, &updatedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get YouTube source %s: %v", id, err)
+		}
 		return nil, false
 	}
 
@@ -571,6 +621,8 @@ func (s *PostgresStore) GetYouTubeSourceByID(id string) (*models.YouTubeSource, 
 
 // CreateOrUpdateYouTubeSource creates or updates a YouTube source
 func (s *PostgresStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var lastProcessed interface{}
 	if source.LastProcessed != "" {
 		t, err := time.Parse(time.RFC3339, source.LastProcessed)
@@ -579,7 +631,7 @@ func (s *PostgresStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource
 		}
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO youtube_sources (id, type, url, name, channel_id, playlist_id, enabled, schedule, last_processed, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -595,14 +647,17 @@ func (s *PostgresStore) CreateOrUpdateYouTubeSource(source *models.YouTubeSource
 		source.ID, source.Type, source.URL, source.Name, source.ChannelID, source.PlaylistID, source.Enabled, source.Schedule, lastProcessed)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update YouTube source %s: %v", source.ID, err)
 	}
 }
 
 // DeleteYouTubeSource deletes a YouTube source by ID
 func (s *PostgresStore) DeleteYouTubeSource(id string) bool {
-	result, err := s.pool.Exec(context.Background(), "DELETE FROM youtube_sources WHERE id = $1", id)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	result, err := s.pool.Exec(ctx, "DELETE FROM youtube_sources WHERE id = $1", id)
 	if err != nil {
+		log.Printf("Failed to delete YouTube source %s: %v", id, err)
 		return false
 	}
 	return result.RowsAffected() > 0
@@ -612,12 +667,14 @@ func (s *PostgresStore) DeleteYouTubeSource(id string) bool {
 
 // CreateOrUpdateTranscript creates or updates a video transcript
 func (s *PostgresStore) CreateOrUpdateTranscript(transcript *models.VideoTranscript) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var duration interface{}
 	if transcript.Duration != nil {
 		duration = *transcript.Duration
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO video_transcripts (id, video_id, video_title, video_url, text, duration, source_id, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -630,21 +687,26 @@ func (s *PostgresStore) CreateOrUpdateTranscript(transcript *models.VideoTranscr
 		transcript.ID, transcript.VideoID, transcript.VideoTitle, transcript.VideoURL, transcript.Text, duration, transcript.SourceID)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update transcript %s: %v", transcript.ID, err)
 	}
 }
 
 // GetTranscriptByID returns a transcript by ID
 func (s *PostgresStore) GetTranscriptByID(id string) (*models.VideoTranscript, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var t models.VideoTranscript
 	var duration sql.NullInt64
 	var sourceID sql.NullString
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, video_id, video_title, video_url, text, duration, source_id, created_at FROM video_transcripts WHERE id = $1",
 		id).Scan(&t.ID, &t.VideoID, &t.VideoTitle, &t.VideoURL, &t.Text, &duration, &sourceID, &t.CreatedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get transcript %s: %v", id, err)
+		}
 		return nil, false
 	}
 
@@ -658,10 +720,13 @@ func (s *PostgresStore) GetTranscriptByID(id string) (*models.VideoTranscript, b
 
 // GetTranscriptsByVideoID returns transcripts for a specific video ID
 func (s *PostgresStore) GetTranscriptsByVideoID(videoID string) []*models.VideoTranscript {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, video_id, video_title, video_url, text, duration, source_id, created_at FROM video_transcripts WHERE video_id = $1 ORDER BY created_at DESC",
 		videoID)
 	if err != nil {
+		log.Printf("Failed to get transcripts by video ID %s: %v", videoID, err)
 		return []*models.VideoTranscript{}
 	}
 	defer rows.Close()
@@ -723,29 +788,43 @@ func (s *PostgresStore) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnal
 
 // GetMarketAnalysisByID returns a market analysis by ID
 func (s *PostgresStore) GetMarketAnalysisByID(id string) (*models.MarketAnalysis, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var a models.MarketAnalysis
 	var trendsJSON, riskFactorsJSON []byte
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, transcript_id, conditions, trends, risk_factors, summary, created_at FROM market_analyses WHERE id = $1",
 		id).Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &a.CreatedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get market analysis %s: %v", id, err)
+		}
 		return nil, false
 	}
 
-	json.Unmarshal(trendsJSON, &a.Trends)
-	json.Unmarshal(riskFactorsJSON, &a.RiskFactors)
+	if err := json.Unmarshal(trendsJSON, &a.Trends); err != nil {
+		log.Printf("Failed to unmarshal trends for analysis %s: %v", id, err)
+		a.Trends = []string{}
+	}
+	if err := json.Unmarshal(riskFactorsJSON, &a.RiskFactors); err != nil {
+		log.Printf("Failed to unmarshal risk factors for analysis %s: %v", id, err)
+		a.RiskFactors = []string{}
+	}
 
 	return &a, true
 }
 
 // GetMarketAnalysesByTranscriptID returns market analyses for a specific transcript ID
 func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*models.MarketAnalysis {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, transcript_id, conditions, trends, risk_factors, summary, created_at FROM market_analyses WHERE transcript_id = $1 ORDER BY created_at DESC",
 		transcriptID)
 	if err != nil {
+		log.Printf("Failed to get market analyses by transcript ID %s: %v", transcriptID, err)
 		return []*models.MarketAnalysis{}
 	}
 	defer rows.Close()
@@ -757,11 +836,18 @@ func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*
 
 		err := rows.Scan(&a.ID, &a.TranscriptID, &a.Conditions, &trendsJSON, &riskFactorsJSON, &a.Summary, &a.CreatedAt)
 		if err != nil {
+			log.Printf("Failed to scan market analysis row: %v", err)
 			continue
 		}
 
-		json.Unmarshal(trendsJSON, &a.Trends)
-		json.Unmarshal(riskFactorsJSON, &a.RiskFactors)
+		if err := json.Unmarshal(trendsJSON, &a.Trends); err != nil {
+			log.Printf("Failed to unmarshal trends for analysis %s: %v", a.ID, err)
+			a.Trends = []string{}
+		}
+		if err := json.Unmarshal(riskFactorsJSON, &a.RiskFactors); err != nil {
+			log.Printf("Failed to unmarshal risk factors for analysis %s: %v", a.ID, err)
+			a.RiskFactors = []string{}
+		}
 
 		analyses = append(analyses, &a)
 	}
@@ -773,9 +859,15 @@ func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*
 
 // CreateOrUpdateRecommendation creates or updates a recommendation
 func (s *PostgresStore) CreateOrUpdateRecommendation(recommendation *models.Recommendation) {
-	suggestedActionsJSON, _ := json.Marshal(recommendation.SuggestedActions)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	suggestedActionsJSON, err := json.Marshal(recommendation.SuggestedActions)
+	if err != nil {
+		log.Printf("Failed to marshal suggested actions for recommendation %s: %v", recommendation.ID, err)
+		suggestedActionsJSON = []byte("[]")
+	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO recommendations (id, analysis_id, action, confidence, suggested_actions, summary, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -787,25 +879,33 @@ func (s *PostgresStore) CreateOrUpdateRecommendation(recommendation *models.Reco
 		recommendation.ID, recommendation.AnalysisID, recommendation.Action, recommendation.Confidence, suggestedActionsJSON, recommendation.Summary)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update recommendation %s: %v", recommendation.ID, err)
 	}
 }
 
 // GetRecommendationByID returns a recommendation by ID
 func (s *PostgresStore) GetRecommendationByID(id string) (*models.Recommendation, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var r models.Recommendation
 	var suggestedActionsJSON []byte
 	var summary sql.NullString
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, analysis_id, action, confidence, suggested_actions, summary, created_at FROM recommendations WHERE id = $1",
 		id).Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &r.CreatedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get recommendation %s: %v", id, err)
+		}
 		return nil, false
 	}
 
-	json.Unmarshal(suggestedActionsJSON, &r.SuggestedActions)
+	if err := json.Unmarshal(suggestedActionsJSON, &r.SuggestedActions); err != nil {
+		log.Printf("Failed to unmarshal suggested actions for recommendation %s: %v", id, err)
+		r.SuggestedActions = []models.SuggestedAction{}
+	}
 	if summary.Valid {
 		r.Summary = summary.String
 	}
@@ -815,10 +915,13 @@ func (s *PostgresStore) GetRecommendationByID(id string) (*models.Recommendation
 
 // GetRecommendationsByAnalysisID returns recommendations for a specific analysis ID
 func (s *PostgresStore) GetRecommendationsByAnalysisID(analysisID string) []*models.Recommendation {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, analysis_id, action, confidence, suggested_actions, summary, created_at FROM recommendations WHERE analysis_id = $1 ORDER BY created_at DESC",
 		analysisID)
 	if err != nil {
+		log.Printf("Failed to get recommendations by analysis ID %s: %v", analysisID, err)
 		return []*models.Recommendation{}
 	}
 	defer rows.Close()
@@ -831,10 +934,14 @@ func (s *PostgresStore) GetRecommendationsByAnalysisID(analysisID string) []*mod
 
 		err := rows.Scan(&r.ID, &r.AnalysisID, &r.Action, &r.Confidence, &suggestedActionsJSON, &summary, &r.CreatedAt)
 		if err != nil {
+			log.Printf("Failed to scan recommendation row: %v", err)
 			continue
 		}
 
-		json.Unmarshal(suggestedActionsJSON, &r.SuggestedActions)
+		if err := json.Unmarshal(suggestedActionsJSON, &r.SuggestedActions); err != nil {
+			log.Printf("Failed to unmarshal suggested actions for recommendation %s: %v", r.ID, err)
+			r.SuggestedActions = []models.SuggestedAction{}
+		}
 		if summary.Valid {
 			r.Summary = summary.String
 		}
@@ -863,7 +970,9 @@ func (s *PostgresStore) CreateOrUpdateWorkflowExecution(execution *models.Workfl
 		}
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO workflow_executions (id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, $11, $12)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -883,21 +992,26 @@ func (s *PostgresStore) CreateOrUpdateWorkflowExecution(execution *models.Workfl
 		execution.Error, startedAt, completedAt)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update workflow execution %s: %v", execution.ID, err)
 	}
 }
 
 // GetWorkflowExecutionByID returns a workflow execution by ID
 func (s *PostgresStore) GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, bool) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var e models.WorkflowExecution
 	var videoTitle, videoID, sourceID, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
 	var startedAt, completedAt sql.NullTime
 
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		"SELECT id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at FROM workflow_executions WHERE id = $1",
 		id).Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &e.CreatedAt, &startedAt, &completedAt)
 
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Failed to get workflow execution %s: %v", id, err)
+		}
 		return nil, false
 	}
 
@@ -930,9 +1044,12 @@ func (s *PostgresStore) GetWorkflowExecutionByID(id string) (*models.WorkflowExe
 
 // GetAllWorkflowExecutions returns all workflow executions
 func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at FROM workflow_executions ORDER BY created_at DESC")
 	if err != nil {
+		log.Printf("Failed to get all workflow executions: %v", err)
 		return []*models.WorkflowExecution{}
 	}
 	defer rows.Close()
@@ -945,6 +1062,7 @@ func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 
 		err := rows.Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &e.CreatedAt, &startedAt, &completedAt)
 		if err != nil {
+			log.Printf("Failed to scan workflow execution row: %v", err)
 			continue
 		}
 
@@ -980,10 +1098,13 @@ func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 
 // GetWorkflowExecutionsBySourceID returns workflow executions for a specific source ID
 func (s *PostgresStore) GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		"SELECT id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at FROM workflow_executions WHERE source_id = $1 ORDER BY created_at DESC",
 		sourceID)
 	if err != nil {
+		log.Printf("Failed to get workflow executions by source ID %s: %v", sourceID, err)
 		return []*models.WorkflowExecution{}
 	}
 	defer rows.Close()
