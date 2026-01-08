@@ -69,7 +69,7 @@ async function postAPI<T>(endpoint: string, body?: any): Promise<T> {
 // Portfolio API
 export async function fetchPortfolios(): Promise<Portfolio[]> {
   const data: PortfoliosResponse = await fetchAPI('/portfolios');
-  return data.portfolios;
+  return data.portfolios || [];
 }
 
 export async function fetchPortfolio(id: string): Promise<Portfolio> {
@@ -78,23 +78,23 @@ export async function fetchPortfolio(id: string): Promise<Portfolio> {
 
 export async function fetchPortfoliosByPlatform(platform: Platform): Promise<Portfolio[]> {
   const data: PlatformPortfoliosResponse = await fetchAPI(`/portfolios/platform/${platform}`);
-  return data.portfolios;
+  return data.portfolios || [];
 }
 
 // Investment API
 export async function fetchInvestments(): Promise<Investment[]> {
   const data: InvestmentsResponse = await fetchAPI('/investments');
-  return data.investments;
+  return data.investments || [];
 }
 
 export async function fetchInvestmentsByPortfolio(portfolioId: string): Promise<Investment[]> {
   const data: InvestmentsResponse = await fetchAPI(`/investments/portfolio/${portfolioId}`);
-  return data.investments;
+  return data.investments || [];
 }
 
 export async function fetchInvestmentsByPlatform(platform: Platform): Promise<Investment[]> {
   const data: PlatformInvestmentsResponse = await fetchAPI(`/investments/platform/${platform}`);
-  return data.investments;
+  return data.investments || [];
 }
 
 // Net Worth API
@@ -153,7 +153,8 @@ export async function getWorkflowExecution(id: string): Promise<WorkflowExecutio
 }
 
 export async function getWorkflowExecutions(): Promise<WorkflowExecution[]> {
-  return fetchAPI<WorkflowExecution[]>('/workflow/executions');
+  const executions = await fetchAPI<WorkflowExecution[]>('/workflow/executions');
+  return executions || [];
 }
 
 export async function getWorkflowExecutionDetails(id: string): Promise<WorkflowExecutionDetails> {
@@ -186,7 +187,8 @@ export async function getRecommendationsSummary(days: number = 7): Promise<Recom
 // YouTube Source Management API
 
 export async function getYouTubeSources(): Promise<YouTubeSource[]> {
-  return fetchAPI<YouTubeSource[]>('/workflow/sources');
+  const sources = await fetchAPI<YouTubeSource[]>('/workflow/sources');
+  return sources || [];
 }
 
 export async function getYouTubeSource(id: string): Promise<YouTubeSource> {
