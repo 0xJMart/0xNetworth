@@ -1002,11 +1002,11 @@ func (s *PostgresStore) GetWorkflowExecutionByID(id string) (*models.WorkflowExe
 	defer cancel()
 	var e models.WorkflowExecution
 	var videoTitle, videoID, sourceID, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
-	var startedAt, completedAt sql.NullTime
+	var createdAt, startedAt, completedAt sql.NullTime
 
 	err := s.pool.QueryRow(ctx,
 		"SELECT id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at FROM workflow_executions WHERE id = $1",
-		id).Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &e.CreatedAt, &startedAt, &completedAt)
+		id).Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &createdAt, &startedAt, &completedAt)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -1036,6 +1036,7 @@ func (s *PostgresStore) GetWorkflowExecutionByID(id string) (*models.WorkflowExe
 	if errorMsg.Valid {
 		e.Error = errorMsg.String
 	}
+	e.CreatedAt = parseTimestamp(createdAt)
 	e.StartedAt = parseTimestamp(startedAt)
 	e.CompletedAt = parseTimestamp(completedAt)
 
@@ -1058,9 +1059,9 @@ func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 	for rows.Next() {
 		var e models.WorkflowExecution
 		var videoTitle, videoID, sourceID, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
-		var startedAt, completedAt sql.NullTime
+		var createdAt, startedAt, completedAt sql.NullTime
 
-		err := rows.Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &e.CreatedAt, &startedAt, &completedAt)
+		err := rows.Scan(&e.ID, &e.Status, &videoID, &e.VideoURL, &videoTitle, &sourceID, &transcriptID, &analysisID, &recommendationID, &errorMsg, &createdAt, &startedAt, &completedAt)
 		if err != nil {
 			log.Printf("Failed to scan workflow execution row: %v", err)
 			continue
@@ -1087,6 +1088,7 @@ func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 		if errorMsg.Valid {
 			e.Error = errorMsg.String
 		}
+		e.CreatedAt = parseTimestamp(createdAt)
 		e.StartedAt = parseTimestamp(startedAt)
 		e.CompletedAt = parseTimestamp(completedAt)
 
