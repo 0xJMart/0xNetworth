@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"0xnetworth/backend/internal/models"
@@ -12,24 +15,86 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const (
+	// Default query timeout
+	defaultQueryTimeout = 5 * time.Second
+	// Default connection pool settings
+	defaultMaxConns = 25
+	defaultMinConns = 5
+)
+
 // PostgresStore is a PostgreSQL-backed store implementation
 type PostgresStore struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	timeout time.Duration
 }
 
 // NewPostgresStore creates a new PostgreSQL store
 func NewPostgresStore(connString string) (*PostgresStore, error) {
-	pool, err := pgxpool.New(context.Background(), connString)
+	// Parse connection string and configure pool
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
+	}
+
+	// Configure connection pool from environment variables
+	maxConns := getEnvInt("DB_MAX_CONNS", defaultMaxConns)
+	minConns := getEnvInt("DB_MIN_CONNS", defaultMinConns)
+	config.MaxConns = int32(maxConns)
+	config.MinConns = int32(minConns)
+
+	// Set connection max lifetime (default: 1 hour)
+	maxLifetime := getEnvDuration("DB_MAX_LIFETIME", time.Hour)
+	config.MaxConnLifetime = maxLifetime
+
+	// Set connection idle timeout (default: 30 minutes)
+	idleTimeout := getEnvDuration("DB_IDLE_TIMEOUT", 30*time.Minute)
+	config.MaxConnIdleTime = idleTimeout
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	// Test the connection
-	if err := pool.Ping(context.Background()); err != nil {
+	// Test the connection with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &PostgresStore{pool: pool}, nil
+	// Get query timeout from environment
+	queryTimeout := getEnvDuration("DB_QUERY_TIMEOUT", defaultQueryTimeout)
+
+	return &PostgresStore{
+		pool:    pool,
+		timeout: queryTimeout,
+	}, nil
+}
+
+// getEnvInt gets an integer from environment variable or returns default
+func getEnvInt(key string, defaultValue int) int {
+	if val := os.Getenv(key); val != "" {
+		if intVal, err := strconv.Atoi(val); err == nil {
+			return intVal
+		}
+	}
+	return defaultValue
+}
+
+// getEnvDuration gets a duration from environment variable or returns default
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if val := os.Getenv(key); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			return duration
+		}
+	}
+	return defaultValue
+}
+
+// getContext returns a context with timeout for database operations
+func (s *PostgresStore) getContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), s.timeout)
 }
 
 // Close closes the database connection pool
@@ -39,7 +104,9 @@ func (s *PostgresStore) Close() {
 
 // InitSchema executes the schema SQL to create tables
 func (s *PostgresStore) InitSchema(schemaSQL string) error {
-	_, err := s.pool.Exec(context.Background(), schemaSQL)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx, schemaSQL)
 	return err
 }
 
@@ -156,6 +223,8 @@ func (s *PostgresStore) GetPortfolioByID(id string) (*models.Portfolio, bool) {
 
 // CreateOrUpdatePortfolio creates or updates a portfolio
 func (s *PostgresStore) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var lastSynced interface{}
 	if portfolio.LastSynced != "" {
 		t, err := time.Parse(time.RFC3339, portfolio.LastSynced)
@@ -164,7 +233,7 @@ func (s *PostgresStore) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 		}
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO portfolios (id, platform, name, type, last_synced, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -176,8 +245,7 @@ func (s *PostgresStore) CreateOrUpdatePortfolio(portfolio *models.Portfolio) {
 		portfolio.ID, portfolio.Platform, portfolio.Name, portfolio.Type, lastSynced)
 
 	if err != nil {
-		// Log error but don't fail silently - could add logging here
-		_ = err
+		log.Printf("Failed to create/update portfolio %s: %v", portfolio.ID, err)
 	}
 }
 
@@ -298,6 +366,8 @@ func (s *PostgresStore) GetInvestmentsByPlatform(platform models.Platform) []*mo
 
 // CreateOrUpdateInvestment creates or updates an investment
 func (s *PostgresStore) CreateOrUpdateInvestment(investment *models.Investment) {
+	ctx, cancel := s.getContext()
+	defer cancel()
 	var lastUpdated interface{}
 	if investment.LastUpdated != "" {
 		t, err := time.Parse(time.RFC3339, investment.LastUpdated)
@@ -306,7 +376,7 @@ func (s *PostgresStore) CreateOrUpdateInvestment(investment *models.Investment) 
 		}
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO investments (id, account_id, platform, symbol, name, quantity, value, price, currency, asset_type, last_updated, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -325,7 +395,7 @@ func (s *PostgresStore) CreateOrUpdateInvestment(investment *models.Investment) 
 		investment.Quantity, investment.Value, investment.Price, investment.Currency, investment.AssetType, lastUpdated)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update investment %s: %v", investment.ID, err)
 	}
 }
 
@@ -622,10 +692,20 @@ func (s *PostgresStore) GetTranscriptsByVideoID(videoID string) []*models.VideoT
 
 // CreateOrUpdateMarketAnalysis creates or updates a market analysis
 func (s *PostgresStore) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnalysis) {
-	trendsJSON, _ := json.Marshal(analysis.Trends)
-	riskFactorsJSON, _ := json.Marshal(analysis.RiskFactors)
+	ctx, cancel := s.getContext()
+	defer cancel()
+	trendsJSON, err := json.Marshal(analysis.Trends)
+	if err != nil {
+		log.Printf("Failed to marshal trends for analysis %s: %v", analysis.ID, err)
+		trendsJSON = []byte("[]")
+	}
+	riskFactorsJSON, err := json.Marshal(analysis.RiskFactors)
+	if err != nil {
+		log.Printf("Failed to marshal risk factors for analysis %s: %v", analysis.ID, err)
+		riskFactorsJSON = []byte("[]")
+	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO market_analyses (id, transcript_id, conditions, trends, risk_factors, summary, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
 		 ON CONFLICT (id) DO UPDATE SET
@@ -637,7 +717,7 @@ func (s *PostgresStore) CreateOrUpdateMarketAnalysis(analysis *models.MarketAnal
 		analysis.ID, analysis.TranscriptID, analysis.Conditions, trendsJSON, riskFactorsJSON, analysis.Summary)
 
 	if err != nil {
-		_ = err
+		log.Printf("Failed to create/update market analysis %s: %v", analysis.ID, err)
 	}
 }
 

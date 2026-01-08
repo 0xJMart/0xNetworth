@@ -34,7 +34,12 @@ func main() {
 			if dbPort == "" {
 				dbPort = "5432"
 			}
-			databaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+			// Get SSL mode from environment (default: disable for dev, require for prod)
+			sslMode := os.Getenv("DB_SSLMODE")
+			if sslMode == "" {
+				sslMode = "disable" // default for development
+			}
+			databaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPassword, dbHost, dbPort, dbName, sslMode)
 		}
 	}
 
@@ -47,23 +52,37 @@ func main() {
 		defer postgresStore.Close()
 
 		// Read and execute schema
-		// Get the path to schema.sql relative to the executable
-		execPath, err := os.Executable()
-		if err != nil {
-			// Fallback: try relative path from current working directory
-			execPath = "."
+		// Try multiple paths to find schema.sql
+		var schemaSQL []byte
+		var schemaErr error
+		schemaPaths := []string{
+			filepath.Join("internal", "store", "schema.sql"), // Development
+			filepath.Join(".", "internal", "store", "schema.sql"),
 		}
-		schemaPath := filepath.Join(filepath.Dir(execPath), "..", "internal", "store", "schema.sql")
-		// Also try relative to current working directory (for development)
-		if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
-			schemaPath = filepath.Join("internal", "store", "schema.sql")
+		
+		// Try executable-relative path
+		if execPath, err := os.Executable(); err == nil {
+			schemaPaths = append([]string{
+				filepath.Join(filepath.Dir(execPath), "..", "internal", "store", "schema.sql"),
+			}, schemaPaths...)
 		}
-		schemaSQL, err := os.ReadFile(schemaPath)
-		if err != nil {
-			log.Printf("Warning: Failed to read schema file at %s: %v. Schema may need to be initialized manually.", schemaPath, err)
+		
+		for _, schemaPath := range schemaPaths {
+			schemaSQL, schemaErr = os.ReadFile(schemaPath)
+			if schemaErr == nil {
+				break
+			}
+		}
+		
+		if schemaErr != nil {
+			log.Printf("Warning: Failed to read schema file from any path: %v. Schema may need to be initialized manually.", schemaErr)
 		} else {
-
+			// Check if FORCE_SCHEMA_INIT is set to fail fast on schema errors
+			forceInit := os.Getenv("FORCE_SCHEMA_INIT") == "true"
 			if err := postgresStore.InitSchema(string(schemaSQL)); err != nil {
+				if forceInit {
+					log.Fatalf("Failed to initialize schema (FORCE_SCHEMA_INIT=true): %v", err)
+				}
 				log.Printf("Warning: Failed to initialize schema (may already exist): %v", err)
 			} else {
 				log.Println("Database schema initialized successfully")
