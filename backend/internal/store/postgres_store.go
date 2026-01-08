@@ -148,7 +148,7 @@ func (s *PostgresStore) GetAllPortfolios() []*models.Portfolio {
 	}
 	defer rows.Close()
 
-	var portfolios []*models.Portfolio
+	portfolios := make([]*models.Portfolio, 0)
 	for rows.Next() {
 		var p models.Portfolio
 		var lastSynced, createdAt, updatedAt sql.NullTime
@@ -183,7 +183,7 @@ func (s *PostgresStore) GetPortfoliosByPlatform(platform models.Platform) []*mod
 	}
 	defer rows.Close()
 
-	var portfolios []*models.Portfolio
+	portfolios := make([]*models.Portfolio, 0)
 	for rows.Next() {
 		var p models.Portfolio
 		var lastSynced, createdAt, updatedAt sql.NullTime
@@ -286,7 +286,7 @@ func (s *PostgresStore) GetAllInvestments() []*models.Investment {
 	}
 	defer rows.Close()
 
-	var investments []*models.Investment
+	investments := make([]*models.Investment, 0)
 	for rows.Next() {
 		var inv models.Investment
 		var lastUpdated, createdAt, updatedAt sql.NullTime
@@ -324,7 +324,7 @@ func (s *PostgresStore) GetInvestmentsByAccount(accountID string) []*models.Inve
 	}
 	defer rows.Close()
 
-	var investments []*models.Investment
+	investments := make([]*models.Investment, 0)
 	for rows.Next() {
 		var inv models.Investment
 		var lastUpdated, createdAt, updatedAt sql.NullTime
@@ -362,7 +362,7 @@ func (s *PostgresStore) GetInvestmentsByPlatform(platform models.Platform) []*mo
 	}
 	defer rows.Close()
 
-	var investments []*models.Investment
+	investments := make([]*models.Investment, 0)
 	for rows.Next() {
 		var inv models.Investment
 		var lastUpdated, createdAt, updatedAt sql.NullTime
@@ -558,7 +558,7 @@ func (s *PostgresStore) GetAllYouTubeSources() []*models.YouTubeSource {
 	}
 	defer rows.Close()
 
-	var sources []*models.YouTubeSource
+	sources := make([]*models.YouTubeSource, 0)
 	for rows.Next() {
 		var src models.YouTubeSource
 		var channelID, playlistID, schedule sql.NullString
@@ -731,7 +731,7 @@ func (s *PostgresStore) GetTranscriptsByVideoID(videoID string) []*models.VideoT
 	}
 	defer rows.Close()
 
-	var transcripts []*models.VideoTranscript
+	transcripts := make([]*models.VideoTranscript, 0)
 	for rows.Next() {
 		var t models.VideoTranscript
 		var duration sql.NullInt64
@@ -829,7 +829,7 @@ func (s *PostgresStore) GetMarketAnalysesByTranscriptID(transcriptID string) []*
 	}
 	defer rows.Close()
 
-	var analyses []*models.MarketAnalysis
+	analyses := make([]*models.MarketAnalysis, 0)
 	for rows.Next() {
 		var a models.MarketAnalysis
 		var trendsJSON, riskFactorsJSON []byte
@@ -926,7 +926,7 @@ func (s *PostgresStore) GetRecommendationsByAnalysisID(analysisID string) []*mod
 	}
 	defer rows.Close()
 
-	var recommendations []*models.Recommendation
+	recommendations := make([]*models.Recommendation, 0)
 	for rows.Next() {
 		var r models.Recommendation
 		var suggestedActionsJSON []byte
@@ -1054,7 +1054,7 @@ func (s *PostgresStore) GetAllWorkflowExecutions() []*models.WorkflowExecution {
 	}
 	defer rows.Close()
 
-	var executions []*models.WorkflowExecution
+	executions := make([]*models.WorkflowExecution, 0)
 	for rows.Next() {
 		var e models.WorkflowExecution
 		var videoTitle, videoID, sourceID, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
@@ -1109,7 +1109,7 @@ func (s *PostgresStore) GetWorkflowExecutionsBySourceID(sourceID string) []*mode
 	}
 	defer rows.Close()
 
-	var executions []*models.WorkflowExecution
+	executions := make([]*models.WorkflowExecution, 0)
 	for rows.Next() {
 		var e models.WorkflowExecution
 		var videoTitle, videoID, sourceIDVal, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
