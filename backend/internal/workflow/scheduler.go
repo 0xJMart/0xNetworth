@@ -16,7 +16,7 @@ import (
 
 // Scheduler manages scheduled workflow executions
 type Scheduler struct {
-	store       *store.Store
+	store       store.Store
 	engine      *Engine
 	cron        *cron.Cron
 	enabled     bool
@@ -24,7 +24,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new workflow scheduler
-func NewScheduler(store *store.Store, engine *Engine) *Scheduler {
+func NewScheduler(store store.Store, engine *Engine) *Scheduler {
 	enabled := os.Getenv("WORKFLOW_SCHEDULE_ENABLED")
 	if enabled == "" || enabled == "true" {
 		enabled = "true"

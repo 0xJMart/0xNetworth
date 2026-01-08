@@ -15,12 +15,12 @@ import (
 
 // SyncHandler handles data synchronization requests
 type SyncHandler struct {
-	store         *store.Store
+	store         store.Store
 	coinbaseClient *coinbase.Client
 }
 
 // NewSyncHandler creates a new sync handler
-func NewSyncHandler(store *store.Store, coinbaseClient *coinbase.Client) *SyncHandler {
+func NewSyncHandler(store store.Store, coinbaseClient *coinbase.Client) *SyncHandler {
 	return &SyncHandler{
 		store:          store,
 		coinbaseClient: coinbaseClient,

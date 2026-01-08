@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"0xnetworth/backend/internal/handlers"
@@ -16,8 +18,83 @@ import (
 )
 
 func main() {
-	// Initialize store
-	store := store.NewStore()
+	// Initialize store - use PostgreSQL if DATABASE_URL is set, otherwise fall back to in-memory
+	var storeInstance store.Store
+	databaseURL := os.Getenv("DATABASE_URL")
+	
+	// Build DATABASE_URL from individual components if not provided
+	if databaseURL == "" {
+		dbHost := os.Getenv("DB_HOST")
+		dbPort := os.Getenv("DB_PORT")
+		dbUser := os.Getenv("DB_USER")
+		dbPassword := os.Getenv("DB_PASSWORD")
+		dbName := os.Getenv("DB_NAME")
+		
+		if dbHost != "" && dbUser != "" && dbPassword != "" && dbName != "" {
+			if dbPort == "" {
+				dbPort = "5432"
+			}
+			// Get SSL mode from environment (default: disable for dev, require for prod)
+			sslMode := os.Getenv("DB_SSLMODE")
+			if sslMode == "" {
+				sslMode = "disable" // default for development
+			}
+			databaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPassword, dbHost, dbPort, dbName, sslMode)
+		}
+	}
+
+	if databaseURL != "" {
+		log.Println("Initializing PostgreSQL store...")
+		postgresStore, err := store.NewPostgresStore(databaseURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL store: %v", err)
+		}
+		defer postgresStore.Close()
+
+		// Read and execute schema
+		// Try multiple paths to find schema.sql
+		var schemaSQL []byte
+		var schemaErr error
+		schemaPaths := []string{
+			filepath.Join("internal", "store", "schema.sql"), // Development
+			filepath.Join(".", "internal", "store", "schema.sql"),
+		}
+		
+		// Try executable-relative path
+		if execPath, err := os.Executable(); err == nil {
+			schemaPaths = append([]string{
+				filepath.Join(filepath.Dir(execPath), "..", "internal", "store", "schema.sql"),
+			}, schemaPaths...)
+		}
+		
+		for _, schemaPath := range schemaPaths {
+			schemaSQL, schemaErr = os.ReadFile(schemaPath)
+			if schemaErr == nil {
+				break
+			}
+		}
+		
+		if schemaErr != nil {
+			log.Printf("Warning: Failed to read schema file from any path: %v. Schema may need to be initialized manually.", schemaErr)
+		} else {
+			// Check if FORCE_SCHEMA_INIT is set to fail fast on schema errors
+			forceInit := os.Getenv("FORCE_SCHEMA_INIT") == "true"
+			if err := postgresStore.InitSchema(string(schemaSQL)); err != nil {
+				if forceInit {
+					log.Fatalf("Failed to initialize schema (FORCE_SCHEMA_INIT=true): %v", err)
+				}
+				log.Printf("Warning: Failed to initialize schema (may already exist): %v", err)
+			} else {
+				log.Println("Database schema initialized successfully")
+			}
+		}
+
+		storeInstance = postgresStore
+		log.Println("PostgreSQL store initialized successfully")
+	} else {
+		log.Println("Warning: DATABASE_URL not set, using in-memory store (data will not persist)")
+		storeInstance = store.NewStore()
+	}
 
 	// Initialize Coinbase client if API keys are provided
 	// Coinbase Advanced Trade API uses CDP API Keys for authentication
@@ -53,15 +130,15 @@ func main() {
 	workflowClient := workflowclient.NewClient(workflowServiceURL)
 
 	// Initialize workflow engine and scheduler
-	workflowEngine := workflow.NewEngine(store, workflowClient)
-	workflowScheduler := workflow.NewScheduler(store, workflowEngine)
+	workflowEngine := workflow.NewEngine(storeInstance, workflowClient)
+	workflowScheduler := workflow.NewScheduler(storeInstance, workflowEngine)
 
 	// Initialize handlers
-	portfoliosHandler := handlers.NewPortfoliosHandler(store)
-	investmentsHandler := handlers.NewInvestmentsHandler(store)
-	networthHandler := handlers.NewNetWorthHandler(store)
-	syncHandler := handlers.NewSyncHandler(store, coinbaseClient)
-	workflowHandler := handlers.NewWorkflowHandler(store, workflowEngine, workflowScheduler)
+	portfoliosHandler := handlers.NewPortfoliosHandler(storeInstance)
+	investmentsHandler := handlers.NewInvestmentsHandler(storeInstance)
+	networthHandler := handlers.NewNetWorthHandler(storeInstance)
+	syncHandler := handlers.NewSyncHandler(storeInstance, coinbaseClient)
+	workflowHandler := handlers.NewWorkflowHandler(storeInstance, workflowEngine, workflowScheduler)
 
 	// Setup router
 	router := gin.Default()

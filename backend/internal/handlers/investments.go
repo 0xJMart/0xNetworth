@@ -11,11 +11,11 @@ import (
 
 // InvestmentsHandler handles investment-related HTTP requests
 type InvestmentsHandler struct {
-	store *store.Store
+	store store.Store
 }
 
 // NewInvestmentsHandler creates a new investments handler
-func NewInvestmentsHandler(store *store.Store) *InvestmentsHandler {
+func NewInvestmentsHandler(store store.Store) *InvestmentsHandler {
 	return &InvestmentsHandler{
 		store: store,
 	}
