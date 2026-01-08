@@ -2,8 +2,8 @@ apiVersion: v2
 name: 0xnetworth
 description: A Helm chart for 0xNetworth - Investment Tracking Dashboard
 type: application
-version: 0.3.8
-appVersion: "0.3.8"
+version: 0.3.9
+appVersion: "0.3.9"
 keywords:
   - investment
   - dashboard
