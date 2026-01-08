@@ -1165,3 +1165,58 @@ func (s *PostgresStore) GetWorkflowExecutionsBySourceID(sourceID string) []*mode
 	return executions
 }
 
+// GetWorkflowExecutionsByVideoID returns workflow executions for a specific video ID
+func (s *PostgresStore) GetWorkflowExecutionsByVideoID(videoID string) []*models.WorkflowExecution {
+	ctx, cancel := s.getContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		"SELECT id, status, video_id, video_url, video_title, source_id, transcript_id, analysis_id, recommendation_id, error, created_at, started_at, completed_at FROM workflow_executions WHERE video_id = $1 ORDER BY created_at DESC",
+		videoID)
+	if err != nil {
+		log.Printf("Failed to get workflow executions by video ID %s: %v", videoID, err)
+		return []*models.WorkflowExecution{}
+	}
+	defer rows.Close()
+
+	executions := make([]*models.WorkflowExecution, 0)
+	for rows.Next() {
+		var e models.WorkflowExecution
+		var videoTitle, videoIDVal, sourceIDVal, transcriptID, analysisID, recommendationID, errorMsg sql.NullString
+		var startedAt, completedAt sql.NullTime
+
+		err := rows.Scan(&e.ID, &e.Status, &videoIDVal, &e.VideoURL, &videoTitle, &sourceIDVal, &transcriptID, &analysisID, &recommendationID, &errorMsg, &e.CreatedAt, &startedAt, &completedAt)
+		if err != nil {
+			log.Printf("Failed to scan workflow execution row: %v", err)
+			continue
+		}
+
+		if videoIDVal.Valid {
+			e.VideoID = videoIDVal.String
+		}
+		if videoTitle.Valid {
+			e.VideoTitle = videoTitle.String
+		}
+		if sourceIDVal.Valid {
+			e.SourceID = sourceIDVal.String
+		}
+		if transcriptID.Valid {
+			e.TranscriptID = transcriptID.String
+		}
+		if analysisID.Valid {
+			e.AnalysisID = analysisID.String
+		}
+		if recommendationID.Valid {
+			e.RecommendationID = recommendationID.String
+		}
+		if errorMsg.Valid {
+			e.Error = errorMsg.String
+		}
+		e.StartedAt = parseTimestamp(startedAt)
+		e.CompletedAt = parseTimestamp(completedAt)
+
+		executions = append(executions, &e)
+	}
+
+	return executions
+}
+

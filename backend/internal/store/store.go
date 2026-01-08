@@ -403,3 +403,17 @@ func (s *MemoryStore) GetWorkflowExecutionsBySourceID(sourceID string) []*models
 	return executions
 }
 
+// GetWorkflowExecutionsByVideoID returns workflow executions for a specific video ID
+func (s *MemoryStore) GetWorkflowExecutionsByVideoID(videoID string) []*models.WorkflowExecution {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	executions := make([]*models.WorkflowExecution, 0)
+	for _, e := range s.executions {
+		if e.VideoID == videoID {
+			executions = append(executions, e)
+		}
+	}
+	return executions
+}
+

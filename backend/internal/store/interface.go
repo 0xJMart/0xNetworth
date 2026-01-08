@@ -57,5 +57,6 @@ type Store interface {
 	GetWorkflowExecutionByID(id string) (*models.WorkflowExecution, bool)
 	GetAllWorkflowExecutions() []*models.WorkflowExecution
 	GetWorkflowExecutionsBySourceID(sourceID string) []*models.WorkflowExecution
+	GetWorkflowExecutionsByVideoID(videoID string) []*models.WorkflowExecution
 }
 

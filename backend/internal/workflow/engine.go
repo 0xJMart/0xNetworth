@@ -3,6 +3,8 @@ package workflow
 import (
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +29,21 @@ func NewEngine(store store.Store, workflowClient *workflowclient.Client) *Engine
 
 // ExecuteWorkflow processes a YouTube video through the agentic workflow
 func (e *Engine) ExecuteWorkflow(videoURL string, sourceID string) (*models.WorkflowExecution, error) {
+	// Extract video ID from URL to check for duplicates
+	videoID := extractVideoIDFromURL(videoURL)
+	
+	// Check if this video has already been processed (globally, not just per-source)
+	if videoID != "" {
+		existingExecutions := e.store.GetWorkflowExecutionsByVideoID(videoID)
+		// Check if any existing execution completed successfully
+		for _, existing := range existingExecutions {
+			if existing.Status == models.WorkflowStatusCompleted {
+				log.Printf("Video %s has already been processed (execution %s). Skipping duplicate.", videoID, existing.ID)
+				return existing, fmt.Errorf("video %s has already been processed", videoID)
+			}
+		}
+	}
+	
 	// Create execution record
 	executionID := uuid.New().String()
 	execution := &models.WorkflowExecution{
@@ -145,5 +162,37 @@ func (e *Engine) buildPortfolioContext() *workflowclient.PortfolioContext {
 		Holdings:   holdings,
 		TotalValue: totalValue,
 	}
+}
+
+// extractVideoIDFromURL extracts the video ID from various YouTube URL formats
+func extractVideoIDFromURL(url string) string {
+	if url == "" {
+		return ""
+	}
+	
+	// Patterns for YouTube URLs
+	patterns := []string{
+		`(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})`,
+		`youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11})`,
+	}
+	
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(url)
+		if len(matches) > 1 {
+			return matches[1]
+		}
+	}
+	
+	// If no pattern matches, check if the input is already a video ID (11 characters)
+	url = strings.TrimSpace(url)
+	if len(url) == 11 && strings.ReplaceAll(strings.ReplaceAll(url, "-", ""), "_", "") != "" {
+		// Check if it's alphanumeric (allowing - and _)
+		if matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]{11}$`, url); matched {
+			return url
+		}
+	}
+	
+	return ""
 }
 
