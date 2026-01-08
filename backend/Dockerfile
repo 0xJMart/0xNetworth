@@ -34,6 +34,9 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=builder /workspace/server .
 
+# Copy schema.sql file for database initialization
+COPY --from=builder /workspace/internal/store/schema.sql /internal/store/schema.sql
+
 EXPOSE 8080
 
 ENTRYPOINT ["/server"]

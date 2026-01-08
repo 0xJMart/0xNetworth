@@ -56,7 +56,8 @@ func main() {
 		var schemaSQL []byte
 		var schemaErr error
 		schemaPaths := []string{
-			filepath.Join("internal", "store", "schema.sql"), // Development
+			"/internal/store/schema.sql",                      // Container path (absolute)
+			filepath.Join("internal", "store", "schema.sql"),  // Development
 			filepath.Join(".", "internal", "store", "schema.sql"),
 		}
 		
@@ -64,6 +65,7 @@ func main() {
 		if execPath, err := os.Executable(); err == nil {
 			schemaPaths = append([]string{
 				filepath.Join(filepath.Dir(execPath), "..", "internal", "store", "schema.sql"),
+				filepath.Join(filepath.Dir(execPath), "internal", "store", "schema.sql"),
 			}, schemaPaths...)
 		}
 		
